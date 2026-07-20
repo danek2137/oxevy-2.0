@@ -16,7 +16,8 @@ Built with: ChatGPT • DeepSeek • OpenCode • Gemini • Cursor
 </div>
 
 ## Sneak Peek
-![Sneak Peek](image.png)
+nothing for now
+
 
 ## Preview
 
