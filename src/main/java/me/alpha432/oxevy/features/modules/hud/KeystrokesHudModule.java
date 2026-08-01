@@ -74,26 +74,13 @@ public class KeystrokesHudModule extends HudModule {
         float anim = AnimationUtil.animate(keyAnimations.get(animKey), target, animationSpeed.getValue());
         keyAnimations.put(animKey, anim);
 
-        int baseColor = bgColor.getValue().getRGB();
         int pressColor = ClickGuiModule.getInstance().color.getValue().getRGB();
-        int color = AnimationUtil.interpolateColor(baseColor, pressColor, anim);
-        
-        int outlineCol = AnimationUtil.interpolateColor(outlineColor.getValue().getRGB(), 0xFFFFFFFF, anim);
+        int color = AnimationUtil.interpolateColor(0xFF11111B, pressColor, anim);
 
         if (rounded.getValue()) {
             RenderUtil.roundRect(ctx, x, y, w, h, radius.getValue(), color);
-            if (outline.getValue()) {
-                // Simplified outline
-                RenderUtil.rect(ctx, x, y, x + w, y + 1, outlineCol);
-                RenderUtil.rect(ctx, x, y + h - 1, x + w, y + h, outlineCol);
-                RenderUtil.rect(ctx, x, y, x + 1, y + h, outlineCol);
-                RenderUtil.rect(ctx, x + w - 1, y, x + w, y + h, outlineCol);
-            }
         } else {
             RenderUtil.rect(ctx, x, y, x + w, y + h, color);
-            if (outline.getValue()) {
-                RenderUtil.rect(ctx, x, y, x + w, y + h, outlineCol, 1.0f);
-            }
         }
 
         int textColor = AnimationUtil.interpolateColor(0xFFAAAAAA, 0xFFFFFFFF, anim);

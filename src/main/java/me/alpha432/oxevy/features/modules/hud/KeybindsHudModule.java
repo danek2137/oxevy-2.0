@@ -18,7 +18,6 @@ import java.util.List;
 public class KeybindsHudModule extends HudModule {
     public final Setting<Boolean> sortAlphabetical = bool("SortAlphabetical", false);
     public final Setting<Boolean> rainbow = bool("Rainbow", false);
-    public final Setting<Boolean> background = bool("Background", true);
     public final Setting<Boolean> bar = bool("Bar", true);
     public final Setting<Boolean> shadow = bool("Shadow", true);
     public final Setting<Integer> spacing = num("Spacing", 3, 0, 8);
@@ -83,25 +82,16 @@ public class KeybindsHudModule extends HudModule {
             }
 
             int textX;
-            int bgStart, bgEnd, barStart, barEnd;
+            int barStart, barEnd;
 
             if (isLeft) {
                 textX = (int) (x + offset);
-                bgStart = (int) (x);
-                bgEnd = (int) (x + entry.width + offset + 6);
                 barStart = (int) (x);
                 barEnd = (int) (x + 3);
             } else {
                 textX = (int) (x + getWidth() - entry.width - offset);
-                bgStart = (int) (x + getWidth() - entry.width - offset - 6);
-                bgEnd = (int) (x + getWidth());
                 barStart = (int) (x + getWidth() - 3);
                 barEnd = (int) (x + getWidth());
-            }
-
-            if (background.getValue()) {
-                int bgColor = new Color(13, 16, 22, 180).getRGB();
-                RenderUtil.rect(ctx, bgStart, drawY, bgEnd, drawY + lineHeight + customSpacing, bgColor);
             }
 
             if (bar.getValue()) {

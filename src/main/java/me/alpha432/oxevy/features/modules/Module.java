@@ -11,12 +11,12 @@ import me.alpha432.oxevy.features.commands.Command;
 import me.alpha432.oxevy.features.settings.Bind;
 import me.alpha432.oxevy.features.settings.Setting;
 import me.alpha432.oxevy.manager.ConfigManager;
+import me.alpha432.oxevy.sound.OxevySounds;
 import me.alpha432.oxevy.util.ColorUtil;
 import me.alpha432.oxevy.util.traits.Jsonable;
 import me.alpha432.oxevy.util.traits.Toggleable;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
-import net.minecraft.sounds.SoundEvents;
 import org.joml.Vector2f;
 
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_UNKNOWN;
@@ -68,13 +68,16 @@ public class Module extends Feature implements Jsonable, Toggleable {
     }
 
     public void enable() {
+        if (Oxevy.tempDisabled && !Oxevy.tempDisabledModules.contains(getName())) return;
+        if (Oxevy.destroyed) return;
         this.enabled.setValue(true);
         EVENT_BUS.register(this);
         EVENT_BUS.post(new ClientEvent(ClientEvent.Type.TOGGLE_MODULE, this));
         if (mc.getSoundManager() != null) {
-            mc.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0f));
+            mc.getSoundManager().play(SimpleSoundInstance.forUI(OxevySounds.ENABLE, 1.0f));
         }
         this.onToggle();
+        if (nullCheck()) return;
         this.onEnable();
     }
 
@@ -83,9 +86,10 @@ public class Module extends Feature implements Jsonable, Toggleable {
         EVENT_BUS.unregister(this);
         EVENT_BUS.post(new ClientEvent(ClientEvent.Type.TOGGLE_MODULE, this));
         if (mc.getSoundManager() != null) {
-            mc.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 0.8f));
+            mc.getSoundManager().play(SimpleSoundInstance.forUI(OxevySounds.DISABLE, 1.0f));
         }
         this.onToggle();
+        if (nullCheck()) return;
         this.onDisable();
     }
 
@@ -207,22 +211,34 @@ public class Module extends Feature implements Jsonable, Toggleable {
     }
 
     public enum Category {
-        COMBAT("Combat"),
-        MISC("Misc"),
-        RENDER("Render"),
-        MOVEMENT("Movement"),
-        PLAYER("Player"),
-        CLIENT("Client"),
-        HUD("Hud");
+        COMBAT("Combat", "C", "CO"),
+        MISC("Misc", "s", "MI"),
+        RENDER("Render", "r", "RE"),
+        MOVEMENT("Movement", "v", "MO"),
+        PLAYER("Player", "p", "PL"),
+        CLIENT("Client", "t", "CL"),
+        HUD("Hud", "H", "HD");
 
         private final String name;
+        private final String icon;
+        private final String shortName;
 
-        Category(String name) {
+        Category(String name, String icon, String shortName) {
             this.name = name;
+            this.icon = icon;
+            this.shortName = shortName;
         }
 
         public String getName() {
             return this.name;
+        }
+
+        public String getIcon() {
+            return this.icon;
+        }
+
+        public String getShortName() {
+            return this.shortName;
         }
     }
 }

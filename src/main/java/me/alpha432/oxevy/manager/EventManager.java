@@ -32,6 +32,7 @@ public class EventManager extends Feature {
         if (nullCheck())
             return;
         Oxevy.moduleManager.onTick();
+        Oxevy.oxevyUsersManager.onTick();
         for (Player player : mc.level.players()) {
             if (player == null || player.getHealth() > 0.0F)
                 continue;

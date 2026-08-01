@@ -25,6 +25,10 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import me.alpha432.oxevy.manager.CapeManager
+import net.fabricmc.loader.api.FabricLoader
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -109,14 +113,24 @@ object ClickGuiWebBridge {
 
     // ── Raw HTTP server ─────────────────────────────────────────────────────
 
+    private data class Request(
+        val method: String,
+        val path: String,
+        val headers: Map<String, String>,
+        val bodyBytes: ByteArray,
+        val body: String
+    )
+
     private fun handleClient(socket: Socket) {
         try {
             socket.soTimeout = 5_000
             socket.use {
-                val reader = BufferedReader(InputStreamReader(it.getInputStream(), StandardCharsets.UTF_8))
-                val out    = it.getOutputStream()
+                val rawIn = it.getInputStream()
+                val out   = it.getOutputStream()
 
-                // Parse request line
+                // Read the request line-by-line until we have the full headers
+                val headerLines = mutableListOf<String>()
+                val reader = BufferedReader(InputStreamReader(rawIn, StandardCharsets.ISO_8859_1))
                 val requestLine = reader.readLine() ?: return
                 val parts = requestLine.split(" ")
                 if (parts.size < 2) return
@@ -124,37 +138,48 @@ object ClickGuiWebBridge {
                 val fullPath = parts[1]
                 val path = fullPath.substringBefore("?")
 
-                // Parse headers
-                val headers = mutableMapOf<String, String>()
                 var line = reader.readLine()
                 while (!line.isNullOrBlank()) {
-                    val colon = line.indexOf(':')
-                    if (colon != -1) {
-                        headers[line.substring(0, colon).trim().lowercase()] = line.substring(colon + 1).trim()
-                    }
+                    headerLines.add(line)
                     line = reader.readLine()
                 }
 
-                // Read body for POST
-                val body: String = if (method == "POST") {
+                val headers = mutableMapOf<String, String>()
+                for (hl in headerLines) {
+                    val colon = hl.indexOf(':')
+                    if (colon != -1) {
+                        headers[hl.substring(0, colon).trim().lowercase()] = hl.substring(colon + 1).trim()
+                    }
+                }
+
+                // Read body as raw bytes for POST
+                val bodyBytes: ByteArray = if (method == "POST") {
                     val len = headers["content-length"]?.toIntOrNull() ?: 0
-                    val buf = CharArray(len)
+                    val buf = ByteArray(len)
                     var read = 0
                     while (read < len) {
-                        val n = reader.read(buf, read, len - read)
+                        val n = rawIn.readNBytes(buf, read, len - read)
                         if (n == -1) break
                         read += n
                     }
-                    String(buf, 0, read)
-                } else ""
+                    buf
+                } else ByteArray(0)
+
+                val body = bodyBytes.toString(StandardCharsets.UTF_8)
+                val req = Request(method, path, headers, bodyBytes, body)
 
                 // Route
                 when {
-                    method == "OPTIONS"                          -> sendCors(out)
-                    method == "GET" && path == "/api/state"      -> handleState(out)
-                    method == "POST" && path == "/api/module/toggle" -> handleToggle(out, body)
-                    method == "POST" && path == "/api/setting"   -> handleSetting(out, body)
-                    method == "GET"                              -> handleStatic(out, path)
+                    req.method == "OPTIONS"                                   -> sendCors(out)
+                    req.method == "GET" && req.path == "/api/state"           -> handleState(out)
+                    req.method == "POST" && req.path == "/api/module/toggle"  -> handleToggle(out, req.body)
+                    req.method == "POST" && req.path == "/api/setting"        -> handleSetting(out, req.body)
+                    req.method == "GET" && req.path == "/api/capes/state"     -> handleCapeState(out)
+                    req.method == "POST" && req.path == "/api/cape/upload"    -> handleCapeUploadRaw(out, req)
+                    req.method == "POST" && req.path == "/api/cape/select"    -> handleCapeSelect(out, req.body)
+                    req.method == "GET" && req.path == "/api/capes/repo"      -> handleCapeRepo(out)
+                    req.method == "GET" && req.path.startsWith("/capes/")     -> handleCapeFile(out, req.path)
+                    req.method == "GET"                                       -> handleStatic(out, req.path)
                     else -> sendText(out, 405, "Method Not Allowed")
                 }
             }
@@ -197,6 +222,188 @@ object ClickGuiWebBridge {
         if (error != null) { sendText(out, 400, error); return }
         sendJson(out, 200, onClientThread { buildState() })
     }
+
+    // ── Cape handlers ───────────────────────────────────────────────────────
+
+    private fun handleCapeState(out: OutputStream) {
+        val state = onClientThread { buildCapeState() }
+        sendJson(out, 200, state)
+    }
+
+    private fun handleCapeUploadRaw(out: OutputStream, req: Request) {
+        val contentType = req.headers["content-type"] ?: ""
+        if (!contentType.contains("multipart/form-data")) {
+            sendText(out, 400, "Only multipart/form-data supported for upload"); return
+        }
+
+        val boundary = contentType.substringAfter("boundary=", "").trim()
+        if (boundary.isEmpty()) { sendText(out, 400, "No boundary found"); return }
+
+        val parts = parseMultipartRaw(req.bodyBytes, boundary)
+        val filePart = parts.firstOrNull { it.name == "file" }
+            ?: run { sendText(out, 400, "No file part"); return }
+
+        val result = onClientThread {
+            val mgr = Oxevy.capeManager
+            val path = mgr.saveUploadedCape(filePart.data, filePart.fileName ?: "cape.png")
+            if (path != null) {
+                Oxevy.LOGGER.info("[Cape] Uploaded cape saved to {}", path)
+                true
+            } else false
+        }
+        if (result) sendJson(out, 200, buildCapeState()) else sendText(out, 500, "Failed to save cape")
+    }
+
+    private fun handleCapeSelect(out: OutputStream, body: String) {
+        val json = parseJson(body) ?: run { sendText(out, 400, "Bad JSON"); return }
+        val mode = json.get("mode")?.asString
+        val index = json.get("index")?.asInt
+        val customUrl = json.get("customUrl")?.asString
+        val repoIndex = json.get("repoIndex")?.asInt
+
+        onClientThread {
+            val mgr = Oxevy.capeManager
+            if (repoIndex != null) {
+                mgr.selectRepoCape(repoIndex)
+            } else {
+                if (mode != null) {
+                    try { mgr.mode = CapeManager.CapeMode.valueOf(mode) } catch (_: Exception) {}
+                }
+                if (index != null) {
+                    mgr.setActiveUnlockedIndex(index)
+                }
+                if (customUrl != null) {
+                    mgr.setCustomCapeUrl(customUrl)
+                }
+                mgr.saveSelectionToLauncherFile()
+            }
+        }
+        sendJson(out, 200, onClientThread { buildCapeState() })
+    }
+
+    private fun handleCapeRepo(out: OutputStream) {
+        val state = onClientThread {
+            val mgr = Oxevy.capeManager
+            val obj = JsonObject()
+            val capesArray = JsonArray()
+            for ((i, entry) in mgr.repoCapes.withIndex()) {
+                val e = JsonObject()
+                e.addProperty("index", i)
+                e.addProperty("name", entry.name)
+                e.addProperty("url", entry.url)
+                capesArray.add(e)
+            }
+            obj.add("capes", capesArray)
+            if (!mgr.isRepoFetched) {
+                mgr.fetchRepoCapesAsync()
+            }
+            obj
+        }
+        sendJson(out, 200, state)
+    }
+
+    private fun handleCapeFile(out: OutputStream, path: String) {
+        val relativePath = path.removePrefix("/capes/")
+        if (relativePath.contains("..")) { sendText(out, 403, "Forbidden"); return }
+
+        val capesDir = FabricLoader.getInstance().gameDir.resolve("oxevy").resolve("capes")
+        val file = capesDir.resolve(relativePath).toFile()
+        if (!file.exists() || !file.isFile) { sendText(out, 404, "Not found"); return }
+
+        val bytes = try { Files.readAllBytes(file.toPath()) } catch (e: Exception) { sendText(out, 404, "Not found"); return }
+        val mime = if (relativePath.endsWith(".png")) "image/png" else "image/png"
+        val header = buildString {
+            append("HTTP/1.1 200 OK\r\n")
+            append("Content-Type: $mime\r\n")
+            append("Content-Length: ${bytes.size}\r\n")
+            appendCors()
+            append("Cache-Control: no-store\r\n")
+            append("Connection: close\r\n\r\n")
+        }
+        out.write(header.toByteArray(StandardCharsets.UTF_8))
+        out.write(bytes)
+        out.flush()
+    }
+
+    // ── Multipart parser (raw bytes) ────────────────────────────────────────
+
+    private data class MultipartPart(val name: String, val fileName: String?, val data: ByteArray)
+
+    private fun parseMultipartRaw(raw: ByteArray, boundary: String): List<MultipartPart> {
+        val parts = mutableListOf<MultipartPart>()
+        val delimiter = "--$boundary"
+        val endDelimiter = "--$boundary--"
+        val delimiterBytes = delimiter.encodeToByteArray()
+        val endBytes = endDelimiter.encodeToByteArray()
+        val crlfcrlf = "\r\n\r\n".encodeToByteArray()
+
+        var pos = 0
+        while (pos < raw.size) {
+            val delimPos = indexOf(raw, delimiterBytes, pos)
+            if (delimPos == -1) break
+            val partStart = delimPos + delimiterBytes.size
+            // skip \r\n after delimiter
+            val contentStart = if (partStart < raw.size && raw[partStart] == '\r'.code.toByte() && partStart + 1 < raw.size && raw[partStart + 1] == '\n'.code.toByte())
+                partStart + 2 else partStart
+            // find next delimiter
+            val nextDelim = indexOf(raw, delimiterBytes, contentStart)
+                .takeIf { it != -1 }
+                ?: indexOf(raw, endBytes, contentStart)
+                    .takeIf { it != -1 }
+                    ?: break
+            // Extract headers and body
+            val partBytes = raw.copyOfRange(contentStart, nextDelim)
+            val headerEnd = indexOf(partBytes, crlfcrlf, 0)
+            if (headerEnd == -1) { pos = nextDelim; continue }
+            val headerStr = partBytes.copyOfRange(0, headerEnd).decodeToString()
+            val dataStart = headerEnd + 4
+            val data = partBytes.copyOfRange(dataStart, partBytes.size)
+            // Remove trailing \r\n
+            val cleanData = if (data.size >= 2 && data[data.size - 2] == '\r'.code.toByte() && data[data.size - 1] == '\n'.code.toByte())
+                data.copyOfRange(0, data.size - 2) else data
+            val name = headerStr.substringAfter("name=\"").substringBefore("\"")
+            val fileName = headerStr.substringAfter("filename=\"").substringBefore("\"").takeIf { it.isNotEmpty() }
+            parts.add(MultipartPart(name, fileName, cleanData))
+            pos = nextDelim
+        }
+        return parts
+    }
+
+    private fun indexOf(array: ByteArray, target: ByteArray, start: Int): Int {
+        if (target.isEmpty()) return -1
+        outer@ for (i in start..array.size - target.size) {
+            for (j in target.indices) {
+                if (array[i + j] != target[j]) continue@outer
+            }
+            return i
+        }
+        return -1
+    }
+
+    private fun buildCapeState(): JsonObject {
+        val mgr = Oxevy.capeManager
+        val obj = JsonObject()
+        obj.addProperty("mode", mgr.mode.name)
+        obj.addProperty("activeIndex", mgr.activeUnlockedIndex)
+        obj.addProperty("customUrl", mgr.customCapeUrl)
+
+        val capesArray = JsonArray()
+        for ((i, entry) in mgr.unlockedCapes.withIndex()) {
+            val e = JsonObject()
+            e.addProperty("index", i)
+            e.addProperty("name", entry.name)
+            if (entry.localFile != null) {
+                e.addProperty("url", "/capes/" + entry.localFile)
+            } else if (entry.url != null) {
+                e.addProperty("url", entry.url)
+            }
+            capesArray.add(e)
+        }
+        obj.add("capes", capesArray)
+        return obj
+    }
+
+    // ── Static file handler ──────────────────────────────────────────────────
 
     private fun handleStatic(out: OutputStream, path: String) {
         val rawPath = path.removePrefix("/")
@@ -244,6 +451,8 @@ object ClickGuiWebBridge {
             catObj.addProperty("name", category.name
                 .lowercase()
                 .replaceFirstChar { it.uppercaseChar() })
+            catObj.addProperty("icon", category.icon)
+            catObj.addProperty("shortName", category.shortName)
             catObj.addProperty("enabledCount", modules.count { it.isEnabled })
 
             val moduleArray = JsonArray()
@@ -457,6 +666,9 @@ object ClickGuiWebBridge {
         path.endsWith(".html") -> "text/html; charset=utf-8"
         path.endsWith(".js")   -> "application/javascript; charset=utf-8"
         path.endsWith(".css")  -> "text/css; charset=utf-8"
+        path.endsWith(".ttf")  -> "font/ttf"
+        path.endsWith(".woff") -> "font/woff"
+        path.endsWith(".woff2") -> "font/woff2"
         path.endsWith(".png")  -> "image/png"
         path.endsWith(".ico")  -> "image/x-icon"
         else                   -> "application/octet-stream"

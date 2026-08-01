@@ -1,5 +1,6 @@
 package me.alpha432.oxevy.network;
 
+import me.alpha432.oxevy.Oxevy;
 import me.alpha432.oxevy.event.system.Subscribe;
 import me.alpha432.oxevy.features.Feature;
 import me.alpha432.oxevy.event.impl.network.PacketEvent;
@@ -40,6 +41,7 @@ public class OxevyNetworkManager extends Feature {
         });
 
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            Oxevy.oxevyUsersManager.markOffline();
             OxevyUserManager.clear();
         });
     }

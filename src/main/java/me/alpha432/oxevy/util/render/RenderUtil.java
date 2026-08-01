@@ -6,6 +6,8 @@ import me.alpha432.oxevy.util.render.state.RectRenderState;
 import me.alpha432.oxevy.util.traits.Util;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.render.TextureSetup;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -412,6 +414,62 @@ public class RenderUtil implements Util {
         (throughWalls ? Layers.lines() : Layers.linesDepth()).draw(bufferBuilder.buildOrThrow());
     }
 
+    public static void drawSoupCircle(PoseStack stack, LivingEntity target, float delta, float animation, int color, boolean throughWalls) {
+        Vec3 camera = getCameraPos();
+        Vec3 targetPos = new Vec3(
+            Mth.lerp(delta, target.xo, target.getX()),
+            Mth.lerp(delta, target.yo, target.getY()),
+            Mth.lerp(delta, target.zo, target.getZ())
+        );
+        float width = target.getBbWidth();
+        float height = target.getBbHeight();
+        float cx = (float) (targetPos.x - camera.x);
+        float cy = (float) (targetPos.y - camera.y);
+        float cz = (float) (targetPos.z - camera.z);
+
+        double yAnim = Math.abs(1.0 + Math.sin(animation)) / 2.0 * height;
+        double yAnim2 = Math.abs(1.0 + Math.sin(animation - 0.45)) / 2.0 * height;
+
+        int segs = 90;
+        double[] cosArr = new double[segs + 1];
+        double[] sinArr = new double[segs + 1];
+        for (int i = 0; i <= segs; i++) {
+            double angle = i * 2.0 * Math.PI / segs;
+            cosArr[i] = Math.cos(angle) * width;
+            sinArr[i] = -Math.sin(angle) * width;
+        }
+
+        BufferBuilder bufferBuilder = Tesselator.getInstance()
+            .begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_LINE_WIDTH);
+        PoseStack.Pose pose = stack.last();
+
+        for (int i = 0; i <= segs; i++) {
+            float x = (float) (cx + cosArr[i]);
+            float z = (float) (cz + sinArr[i]);
+            float yTop = (float) (cy + yAnim);
+            float yBot = (float) (cy + yAnim2);
+
+            int fromColor = multAlpha(color, (int) (0.6f * 255));
+            int toColor = multAlpha(color, 0);
+
+            bufferBuilder.addVertex(pose, x, yTop, z).setColor(fromColor).setLineWidth(3f);
+            bufferBuilder.addVertex(pose, x, yBot, z).setColor(toColor).setLineWidth(3f);
+
+            if (i < segs) {
+                float xNext = (float) (cx + cosArr[i + 1]);
+                float zNext = (float) (cz + sinArr[i + 1]);
+                bufferBuilder.addVertex(pose, x, yTop, z).setColor(color).setLineWidth(3f);
+                bufferBuilder.addVertex(pose, xNext, yTop, zNext).setColor(color).setLineWidth(3f);
+            }
+        }
+
+        (throughWalls ? Layers.lines() : Layers.linesDepth()).draw(bufferBuilder.buildOrThrow());
+    }
+
+    private static int multAlpha(int color, int alpha) {
+        return (color & 0x00FFFFFF) | (Math.max(0, Math.min(255, alpha)) << 24);
+    }
+
     public static void drawCircle(PoseStack stack, Vec3 center, float radius, int segments, Color color, float width, boolean throughWalls) {
         Vec3 camera = getCameraPos();
         float cx = (float) (center.x - camera.x);
@@ -436,6 +494,88 @@ public class RenderUtil implements Util {
         }
 
         (throughWalls ? Layers.lines() : Layers.linesDepth()).draw(bufferBuilder.buildOrThrow());
+    }
+
+    public static void drawFilledRing(PoseStack stack, Vec3 center, float innerRadius, float outerRadius, int segments, int color, boolean throughWalls) {
+        Vec3 camera = getCameraPos();
+        float cx = (float) (center.x - camera.x);
+        float cy = (float) (center.y - camera.y);
+        float cz = (float) (center.z - camera.z);
+
+        BufferBuilder bufferBuilder = Tesselator.getInstance()
+                .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        PoseStack.Pose pose = stack.last();
+
+        for (int i = 0; i < segments; i++) {
+            double angle1 = i * 2 * Math.PI / segments;
+            double angle2 = (i + 1) * 2 * Math.PI / segments;
+            float x1i = cx + (float) (Math.cos(angle1) * innerRadius);
+            float z1i = cz + (float) (Math.sin(angle1) * innerRadius);
+            float x1o = cx + (float) (Math.cos(angle1) * outerRadius);
+            float z1o = cz + (float) (Math.sin(angle1) * outerRadius);
+            float x2i = cx + (float) (Math.cos(angle2) * innerRadius);
+            float z2i = cz + (float) (Math.sin(angle2) * innerRadius);
+            float x2o = cx + (float) (Math.cos(angle2) * outerRadius);
+            float z2o = cz + (float) (Math.sin(angle2) * outerRadius);
+
+            bufferBuilder.addVertex(pose, x1i, cy, z1i).setColor(color);
+            bufferBuilder.addVertex(pose, x2i, cy, z2i).setColor(color);
+            bufferBuilder.addVertex(pose, x2o, cy, z2o).setColor(color);
+            bufferBuilder.addVertex(pose, x1o, cy, z1o).setColor(color);
+        }
+
+        (throughWalls ? Layers.quads() : Layers.quadsDepth()).draw(bufferBuilder.buildOrThrow());
+    }
+
+    public static void drawBillboardRing(PoseStack stack, Vec3 center, float innerRadius, float outerRadius, int segments, int color) {
+        Vec3 camera = getCameraPos();
+        float cx = (float) (center.x - camera.x);
+        float cy = (float) (center.y - camera.y);
+        float cz = (float) (center.z - camera.z);
+
+        Vec3 lookDir = mc.gameRenderer.getMainCamera().position().subtract(center).normalize();
+        Vec3 up = new Vec3(0, 1, 0);
+        Vec3 right = lookDir.cross(up).normalize();
+        Vec3 localUp = right.cross(lookDir).normalize();
+        if (localUp.lengthSqr() < 0.001) {
+            localUp = new Vec3(0, 0, 1);
+            right = lookDir.cross(localUp).normalize();
+            localUp = right.cross(lookDir).normalize();
+        }
+
+        BufferBuilder bufferBuilder = Tesselator.getInstance()
+                .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        PoseStack.Pose pose = stack.last();
+
+        double rx = right.x, ry = right.y, rz = right.z;
+        double ux = localUp.x, uy = localUp.y, uz = localUp.z;
+
+        for (int i = 0; i < segments; i++) {
+            double a1 = i * 2.0 * Math.PI / segments;
+            double a2 = (i + 1) * 2.0 * Math.PI / segments;
+            double c1 = Math.cos(a1), s1 = Math.sin(a1);
+            double c2 = Math.cos(a2), s2 = Math.sin(a2);
+
+            float x1i = (float) (cx + (rx * c1 + ux * s1) * innerRadius);
+            float y1i = (float) (cy + (ry * c1 + uy * s1) * innerRadius);
+            float z1i = (float) (cz + (rz * c1 + uz * s1) * innerRadius);
+            float x1o = (float) (cx + (rx * c1 + ux * s1) * outerRadius);
+            float y1o = (float) (cy + (ry * c1 + uy * s1) * outerRadius);
+            float z1o = (float) (cz + (rz * c1 + uz * s1) * outerRadius);
+            float x2i = (float) (cx + (rx * c2 + ux * s2) * innerRadius);
+            float y2i = (float) (cy + (ry * c2 + uy * s2) * innerRadius);
+            float z2i = (float) (cz + (rz * c2 + uz * s2) * innerRadius);
+            float x2o = (float) (cx + (rx * c2 + ux * s2) * outerRadius);
+            float y2o = (float) (cy + (ry * c2 + uy * s2) * outerRadius);
+            float z2o = (float) (cz + (rz * c2 + uz * s2) * outerRadius);
+
+            bufferBuilder.addVertex(pose, x1i, y1i, z1i).setColor(color);
+            bufferBuilder.addVertex(pose, x2i, y2i, z2i).setColor(color);
+            bufferBuilder.addVertex(pose, x2o, y2o, z2o).setColor(color);
+            bufferBuilder.addVertex(pose, x1o, y1o, z1o).setColor(color);
+        }
+
+        Layers.quads().draw(bufferBuilder.buildOrThrow());
     }
 
     public static void drawCurvedLine(PoseStack stack, List<Vec3> points, int color, float lineWidth, boolean throughWalls) {

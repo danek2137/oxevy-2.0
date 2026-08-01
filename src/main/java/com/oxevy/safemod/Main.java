@@ -9,13 +9,7 @@ public class Main implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        // Initialize Discord Rich Presence if a client ID is provided via env var
         String clientId = System.getenv("OXEVY_DISCORD_CLIENT_ID");
-        if (clientId != null && !clientId.isEmpty()) {
-            com.oxevy.safemod.discord.DiscordRpcManager.init(clientId);
-            LOGGER.info("OxEvY: Discord RPC init attempted with clientId=" + clientId);
-        } else {
-            LOGGER.info("OxEvY: No Discord RPC client ID provided. Skipping Discord RPC initialization.");
-        }
+        com.oxevy.safemod.discord.DiscordRpcManager.init(clientId);
     }
 }

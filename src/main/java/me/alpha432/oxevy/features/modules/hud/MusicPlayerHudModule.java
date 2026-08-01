@@ -1,7 +1,11 @@
 package me.alpha432.oxevy.features.modules.hud;
 
+import me.alpha432.oxevy.event.impl.input.MouseInputEvent;
 import me.alpha432.oxevy.event.impl.render.Render2DEvent;
+import me.alpha432.oxevy.event.system.Subscribe;
+import me.alpha432.oxevy.features.gui.HudEditorScreen;
 import me.alpha432.oxevy.features.settings.Setting;
+import me.alpha432.oxevy.util.render.RenderUtil;
 import net.minecraft.client.gui.GuiGraphics;
 
 import java.io.BufferedReader;
@@ -26,6 +30,40 @@ public class MusicPlayerHudModule extends HudModule {
     private volatile boolean useFlatpakHost;
     private volatile long retryAfterMs;
 
+    // ── Visual constants ────────────────────────────────────────────
+    private static final float PILL_HEIGHT = 38.0f;
+    private static final float PILL_PADDING = 6.0f;
+    private static final float ALBUM_SIZE = 26.0f;
+    private static final float MODULE_GAP = 8.0f;
+    private static final float PILL_RADIUS = 12.0f;
+
+    private static final int COLOR_BG = 0xCC1A1E24;
+    private static final int COLOR_BORDER = 0xFF00FF66;
+    private static final int COLOR_ACCENT = 0xFF00FF66;
+    private static final int COLOR_TITLE = 0xFFE2E8F0;
+    private static final int COLOR_SUBTITLE = 0xFF94A3B8;
+    private static final int COLOR_ERROR = 0xFFEF4444;
+    private static final int COLOR_CONTROL_ICON = 0xFFCBD5E1;
+    private static final int COLOR_CORNER_ACCENT = 0xFF2A2E36;
+    private static final int COLOR_WHITE = 0xFFFFFFFF;
+
+    private static final int EQ_BARS = 6;
+    private static final float EQ_BAR_WIDTH = 3.0f;
+    private static final float EQ_BAR_GAP = 2.0f;
+    private static final float EQ_MAX_HEIGHT = 14.0f;
+
+    // ── Equalizer state ─────────────────────────────────────────────
+    private final float[] eqHeights = new float[EQ_BARS];
+    private long lastEqUpdate = 0;
+
+    // ── Button hit-test positions (set during draw) ─────────────────
+    private float btnPrevX, btnPrevY;
+    private float btnPlayCx, btnPlayCy;
+    private float btnNextX, btnNextY;
+    private float btnLoopX, btnLoopY;
+    private float lastPillX, lastPillY, lastPillW;
+
+    // ── OS constants ────────────────────────────────────────────────
     private static final String OS = System.getProperty("os.name").toLowerCase(Locale.ROOT);
     private static final boolean IS_WINDOWS = OS.contains("win");
     private static final boolean IS_LINUX = OS.contains("nix") || OS.contains("nux") || OS.contains("aix");
@@ -47,8 +85,12 @@ public class MusicPlayerHudModule extends HudModule {
     };
 
     public MusicPlayerHudModule() {
-        super("MusicPlayer", "Shows system audio (Spotify, YouTube, etc.) via MPRIS", 200, 50);
+        super("MusicPlayer", "Shows system audio (Spotify, YouTube, etc.) via MPRIS", 240, 40);
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  BACKEND — completely unchanged
+    // ═══════════════════════════════════════════════════════════════════
 
     @Override
     public void onEnable() {
@@ -404,6 +446,99 @@ public class MusicPlayerHudModule extends HudModule {
 
     private record CommandResult(int exitCode, String output) {}
 
+    // ═══════════════════════════════════════════════════════════════════
+    //  MEDIA CONTROLS — functional play/pause/next/prev via MPRIS
+    // ═══════════════════════════════════════════════════════════════════
+
+    private void sendControlCommand(String... args) {
+        try {
+            if (IS_LINUX) {
+                if (playerctlCommand == null) return;
+                List<String> command = new ArrayList<>();
+                for (String part : playerctlCommand) command.add(part);
+                for (String arg : args) command.add(arg);
+                ProcessBuilder pb = new ProcessBuilder(command);
+                String currentPath = System.getenv("PATH");
+                pb.environment().put("PATH",
+                        currentPath == null || currentPath.isBlank() ? DEFAULT_PATH : currentPath + ":" + DEFAULT_PATH);
+                pb.redirectErrorStream(true);
+                pb.start();
+            } else if (IS_WINDOWS) {
+                String psCmd = switch (args[0]) {
+                    case "play-pause" -> "$s.TryTogglePlayPauseAsync().GetResults()";
+                    case "next" -> "$s.TrySkipNextAsync().GetResults()";
+                    case "previous" -> "$s.TrySkipPreviousAsync().GetResults()";
+                    default -> "";
+                };
+                if (psCmd.isEmpty()) return;
+                new ProcessBuilder("powershell", "-NoProfile", "-Command",
+                        "try{$s=[Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]::RequestAsync().GetResults().GetCurrentSession();if($s){" + psCmd + "}}catch{}")
+                        .start();
+            } else if (IS_MAC) {
+                String osaVerb = switch (args[0]) {
+                    case "play-pause" -> "playpause";
+                    case "next" -> "next track";
+                    case "previous" -> "previous track";
+                    default -> "";
+                };
+                if (osaVerb.isEmpty()) return;
+                String[] apps = {"Spotify", "Music", "VLC", "IINA"};
+                for (String app : apps) {
+                    try {
+                        new ProcessBuilder("osascript", "-e",
+                                "tell application \"" + app + "\" to " + osaVerb).start();
+                    } catch (Exception ignored) {}
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void playPause() { sendControlCommand("play-pause"); }
+    private void nextTrack() { sendControlCommand("next"); }
+    private void previousTrack() { sendControlCommand("previous"); }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  CLICK HANDLING — wire pill buttons during normal gameplay
+    // ═══════════════════════════════════════════════════════════════════
+
+    @Subscribe
+    public void onMusicClick(MouseInputEvent e) {
+        if (nullCheck()) return;
+        if (mc.screen instanceof HudEditorScreen) return;
+
+        if (e.getAction() == 1) {
+            int mx = getMouseX();
+            int my = getMouseY();
+
+            if (mx < lastPillX || mx > lastPillX + lastPillW) return;
+            if (my < lastPillY || my > lastPillY + PILL_HEIGHT) return;
+
+            if (hitCircle(mx, my, btnPlayCx, btnPlayCy, 10)) {
+                playPause();
+            } else if (hitRect(mx, my, btnPrevX, btnPrevY, 10, 12)) {
+                previousTrack();
+            } else if (hitRect(mx, my, btnNextX, btnNextY, 10, 12)) {
+                nextTrack();
+            } else if (hitRect(mx, my, btnLoopX, btnLoopY, 10, 8)) {
+                // loop toggle is visual-only for now
+            }
+        }
+    }
+
+    private static boolean hitCircle(int mx, int my, float cx, float cy, float r) {
+        float dx = mx - cx, dy = my - cy;
+        return dx * dx + dy * dy <= r * r;
+    }
+
+    private static boolean hitRect(int mx, int my, float rx, float ry, float rw, float rh) {
+        return mx >= rx && mx <= rx + rw && my >= ry && my <= ry + rh;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  RENDERING — Neon Green / Emerald pixelated pill HUD
+    // ═══════════════════════════════════════════════════════════════════
+
     @Override
     public void drawContent(Render2DEvent e) {
         if (nullCheck()) return;
@@ -411,72 +546,240 @@ public class MusicPlayerHudModule extends HudModule {
         float x = getX();
         float y = getY();
         GuiGraphics ctx = e.getContext();
-        int lineHeight = mc.font.lineHeight;
-        float drawY = y;
-        int maxWidth = 0;
-
-        int screenWidth = mc.getWindow().getGuiScaledWidth();
-        boolean isLeft = x < screenWidth / 2.0f;
 
         String track = currentTrack.get();
         String artist = currentArtist.get();
         String status = currentStatus.get();
         String error = lastError.get();
         boolean hasTrack = !track.isEmpty();
-        boolean isPaused = "Paused".equalsIgnoreCase(status);
+        boolean isPlaying = hasTrack && !"Paused".equalsIgnoreCase(status);
+        boolean isPaused = hasTrack && "Paused".equalsIgnoreCase(status);
 
-        String header;
-        int headerColor;
-        if (hasTrack && isPaused) {
-            header = "§7\u266B Paused";
-            headerColor = 0xFFAAAAAA;
-        } else if (hasTrack) {
-            header = "§b\u266B Now Playing";
-            headerColor = 0xFF55FFFF;
-        } else {
-            header = "§7\u266B No media";
-            headerColor = 0xFFAAAAAA;
-        }
+        updateEqualizer(isPlaying || isPaused);
 
-        int headerWidth = mc.font.width(header);
-        int headerX = isLeft ? (int) (x + 2) : (int) (x + getWidth() - 2 - headerWidth);
-        ctx.drawString(mc.font, header, headerX, (int) drawY, headerColor);
-        maxWidth = Math.max(maxWidth, headerWidth);
-        drawY += lineHeight;
-
+        String titleText = hasTrack
+                ? track.toUpperCase(Locale.ROOT)
+                : (error.isEmpty() ? "NO MEDIA" : "NO MEDIA");
+        String subtitleText;
         if (hasTrack) {
-            String trackStr = (isPaused ? "§7" : "§f") + track;
-            int trackWidth = mc.font.width(trackStr);
-            int trackX = isLeft ? (int) (x + 2) : (int) (x + getWidth() - 2 - trackWidth);
-            ctx.drawString(mc.font, trackStr, trackX, (int) drawY, isPaused ? 0xFF777777 : 0xFFFFFFFF);
-            maxWidth = Math.max(maxWidth, trackWidth);
-            drawY += lineHeight;
-
-            String artistStr = "§7by §f" + artist;
-            int artistWidth = mc.font.width(artistStr);
-            int artistX = isLeft ? (int) (x + 2) : (int) (x + getWidth() - 2 - artistWidth);
-            ctx.drawString(mc.font, artistStr, artistX, (int) drawY, 0xFF999999);
-            maxWidth = Math.max(maxWidth, artistWidth);
-            drawY += lineHeight;
+            subtitleText = artist;
+        } else if (!error.isEmpty()) {
+            subtitleText = error.length() > 32 ? error.substring(0, 29) + "..." : error;
         } else {
-            String trackStr = "§7Nothing playing";
-            int trackWidth = mc.font.width(trackStr);
-            int trackX = isLeft ? (int) (x + 2) : (int) (x + getWidth() - 2 - trackWidth);
-            ctx.drawString(mc.font, trackStr, trackX, (int) drawY, 0xFF777777);
-            maxWidth = Math.max(maxWidth, trackWidth);
-            drawY += lineHeight;
+            subtitleText = "";
         }
 
-        if (!error.isEmpty()) {
-            String errorStr = "§c" + error;
-            int errorWidth = mc.font.width(errorStr);
-            int errorX = isLeft ? (int) (x + 2) : (int) (x + getWidth() - 2 - errorWidth);
-            ctx.drawString(mc.font, errorStr, errorX, (int) drawY, 0xFFFF5555);
-            maxWidth = Math.max(maxWidth, errorWidth);
-            drawY += lineHeight;
+        float titleWidth = mc.font.width(titleText);
+        float subtitleWidth = mc.font.width(subtitleText);
+        float centerWidth = Math.max(titleWidth, subtitleWidth);
+        float eqWidth = EQ_BARS * EQ_BAR_WIDTH + (EQ_BARS - 1) * EQ_BAR_GAP;
+        float controlsWidth = 64;
+
+        float totalWidth = PILL_PADDING + ALBUM_SIZE + MODULE_GAP
+                + centerWidth + MODULE_GAP
+                + eqWidth + MODULE_GAP
+                + controlsWidth + PILL_PADDING;
+        totalWidth = Math.max(totalWidth, 220);
+
+        setWidth(totalWidth);
+        setHeight(PILL_HEIGHT);
+
+        // 1 ── pill background with green border
+        drawBorderedPill(ctx, x, y, totalWidth, PILL_HEIGHT, PILL_RADIUS, COLOR_BG, COLOR_BORDER);
+
+        // 2 ── album cover (white square + green ID card graphic)
+        float albumX = x + PILL_PADDING;
+        float albumY = y + (PILL_HEIGHT - ALBUM_SIZE) / 2;
+        drawAlbumCover(ctx, albumX, albumY);
+
+        // 3 ── track info
+        float textX = albumX + ALBUM_SIZE + MODULE_GAP;
+        float textBlockH = mc.font.lineHeight * 2;
+        float textY = y + (PILL_HEIGHT - textBlockH) / 2;
+        ctx.drawString(mc.font, titleText, (int) textX, (int) textY, COLOR_TITLE);
+        if (!subtitleText.isEmpty()) {
+            int subColor = (error.isEmpty() && hasTrack) ? COLOR_SUBTITLE : COLOR_ERROR;
+            ctx.drawString(mc.font, subtitleText, (int) textX, (int) (textY + mc.font.lineHeight), subColor);
         }
 
-        setWidth(Math.max(140, maxWidth + 4));
-        setHeight(drawY - y);
+        // 4 ── equalizer bars
+        float eqX = textX + centerWidth + MODULE_GAP;
+        float eqY = y + (PILL_HEIGHT - EQ_MAX_HEIGHT) / 2;
+        for (int i = 0; i < EQ_BARS; i++) {
+            float barX = eqX + i * (EQ_BAR_WIDTH + EQ_BAR_GAP);
+            float barH = eqHeights[i];
+            float barY = eqY + EQ_MAX_HEIGHT - barH;
+            RenderUtil.rect(ctx, barX, barY, barX + EQ_BAR_WIDTH, barY + barH, COLOR_ACCENT);
+        }
+
+        // 5 ── playback controls
+        float controlsX = eqX + eqWidth + MODULE_GAP;
+        float controlsY = y + (PILL_HEIGHT - 12) / 2;
+        drawControls(ctx, controlsX, controlsY, isPlaying);
+
+        // 6 ── corner accent triangle
+        drawCornerAccent(ctx, x + totalWidth, y + PILL_HEIGHT);
+
+        // store pill bounds for click hit-testing
+        lastPillX = x;
+        lastPillY = y;
+        lastPillW = totalWidth;
+    }
+
+    // ── Equalizer animation ─────────────────────────────────────────
+
+    private void updateEqualizer(boolean active) {
+        long now = System.currentTimeMillis();
+        if (now - lastEqUpdate < 80) return;
+        lastEqUpdate = now;
+
+        for (int i = 0; i < EQ_BARS; i++) {
+            if (active) {
+                double t = now * 0.003;
+                double h = 0;
+                h += Math.sin(t * 2.1 + i * 1.3) * 0.3;
+                h += Math.sin(t * 3.7 + i * 0.7) * 0.25;
+                h += Math.sin(t * 1.4 + i * 2.1) * 0.2;
+                h += Math.sin(t * 5.3 + i * 1.8) * 0.15;
+                h = (h + 0.9) / 1.8;
+                h = Math.max(0.15, Math.min(1.0, h));
+                eqHeights[i] = (float) (h * EQ_MAX_HEIGHT);
+            } else {
+                eqHeights[i] = Math.max(2, eqHeights[i] * 0.9f);
+            }
+        }
+    }
+
+    // ── Pill shape ──────────────────────────────────────────────────
+
+    private void drawBorderedPill(GuiGraphics ctx, float x, float y,
+                                  float w, float h, float r,
+                                  int bgColor, int borderColor) {
+        drawScanlineRoundedRect(ctx, x, y, w, h, r, borderColor);
+        drawScanlineRoundedRect(ctx, x + 1, y + 1, w - 2, h - 2,
+                Math.max(0, r - 1), bgColor);
+    }
+
+    private void drawScanlineRoundedRect(GuiGraphics ctx, float x, float y,
+                                         float w, float h, float r, int color) {
+        for (float row = 0; row < h; row++) {
+            float inset = 0;
+            if (row < r) {
+                float d = r - row;
+                inset = r - (float) Math.sqrt(Math.max(0, r * r - d * d));
+            } else if (row > h - r) {
+                float d = row - (h - r);
+                inset = r - (float) Math.sqrt(Math.max(0, r * r - d * d));
+            }
+            ctx.fill(
+                    (int) (x + inset), (int) (y + row),
+                    (int) (x + w - inset), (int) (y + row + 1),
+                    color);
+        }
+    }
+
+    // ── Album cover ─────────────────────────────────────────────────
+
+    private void drawAlbumCover(GuiGraphics ctx, float x, float y) {
+        RenderUtil.rect(ctx, x, y, x + ALBUM_SIZE, y + ALBUM_SIZE, COLOR_WHITE);
+
+        float p = 4;
+        RenderUtil.rect(ctx, x + p, y + p + 2,
+                x + ALBUM_SIZE - p, y + ALBUM_SIZE - p, COLOR_ACCENT);
+
+        float ly = y + p + 5;
+        float lp = 3;
+        RenderUtil.rect(ctx, x + p + lp, ly,
+                x + ALBUM_SIZE - p - lp, ly + 1.5f, COLOR_WHITE);
+        RenderUtil.rect(ctx, x + p + lp, ly + 4,
+                x + ALBUM_SIZE - p - lp - 3, ly + 5.5f, COLOR_WHITE);
+        RenderUtil.rect(ctx, x + p + lp, ly + 8,
+                x + ALBUM_SIZE - p - lp - 1, ly + 9.5f, COLOR_WHITE);
+    }
+
+    // ── Playback controls ───────────────────────────────────────────
+
+    private void drawControls(GuiGraphics ctx, float x, float y, boolean isPlaying) {
+        int icon = COLOR_CONTROL_ICON;
+
+        drawPrevIcon(ctx, x, y, icon);
+        btnPrevX = x;
+        btnPrevY = y;
+
+        float playCx = x + 16;
+        float playCy = y + 6;
+        drawPlayPauseButton(ctx, playCx, playCy, isPlaying);
+        btnPlayCx = playCx;
+        btnPlayCy = playCy;
+
+        drawNextIcon(ctx, x + 28, y, icon);
+        btnNextX = x + 28;
+        btnNextY = y;
+
+        drawLoopIcon(ctx, x + 42, y, isPlaying ? COLOR_ACCENT : icon);
+        btnLoopX = x + 42;
+        btnLoopY = y;
+    }
+
+    private void drawPrevIcon(GuiGraphics ctx, float x, float y, int color) {
+        ctx.fill((int) x, (int) (y + 1), (int) (x + 1.5f), (int) (y + 11), color);
+        int[] w = {1, 2, 3, 4, 3, 2, 1};
+        for (int i = 0; i < w.length; i++) {
+            ctx.fill((int) (x + 3), (int) (y + 3 + i),
+                    (int) (x + 3 + w[i]), (int) (y + 4 + i), color);
+        }
+    }
+
+    private void drawNextIcon(GuiGraphics ctx, float x, float y, int color) {
+        int[] w = {4, 3, 2, 1, 2, 3, 4};
+        for (int i = 0; i < w.length; i++) {
+            ctx.fill((int) x, (int) (y + 3 + i),
+                    (int) (x + w[i]), (int) (y + 4 + i), color);
+        }
+        ctx.fill((int) (x + 5.5f), (int) (y + 1), (int) (x + 7), (int) (y + 11), color);
+    }
+
+    private void drawPlayPauseButton(GuiGraphics ctx, float cx, float cy, boolean isPlaying) {
+        float radius = 10;
+        for (float dy = -radius; dy <= radius; dy++) {
+            float hw = (float) Math.sqrt(Math.max(0, radius * radius - dy * dy));
+            ctx.fill(
+                    (int) (cx - hw), (int) (cy + dy),
+                    (int) (cx + hw + 1), (int) (cy + dy + 1),
+                    COLOR_ACCENT);
+        }
+
+        if (isPlaying) {
+            ctx.fill((int) (cx - 3), (int) (cy - 4), (int) (cx - 1), (int) (cy + 5), COLOR_WHITE);
+            ctx.fill((int) (cx + 1), (int) (cy - 4), (int) (cx + 3), (int) (cy + 5), COLOR_WHITE);
+        } else {
+            int[] tw = {1, 3, 5, 7, 5, 3, 1};
+            for (int i = 0; i < tw.length; i++) {
+                ctx.fill(
+                        (int) (cx - 3), (int) (cy - 3 + i),
+                        (int) (cx - 3 + tw[i]), (int) (cy - 2 + i),
+                        COLOR_WHITE);
+            }
+        }
+    }
+
+    private void drawLoopIcon(GuiGraphics ctx, float x, float y, int color) {
+        ctx.fill((int) (x + 1), (int) y, (int) (x + 9), (int) (y + 2), color);
+        ctx.fill((int) (x + 7), (int) (y + 2), (int) (x + 9), (int) (y + 7), color);
+        ctx.fill((int) (x + 1), (int) (y + 5), (int) (x + 9), (int) (y + 7), color);
+        ctx.fill((int) (x + 1), (int) (y + 2), (int) (x + 3), (int) (y + 7), color);
+        ctx.fill((int) x, (int) y, (int) (x + 3), (int) (y + 2), color);
+    }
+
+    // ── Corner accent ───────────────────────────────────────────────
+
+    private void drawCornerAccent(GuiGraphics ctx, float tipX, float tipY) {
+        int size = 6;
+        for (int i = 0; i < size; i++) {
+            ctx.fill(
+                    (int) (tipX - i - 1), (int) (tipY - size + i),
+                    (int) (tipX), (int) (tipY - size + i + 1),
+                    COLOR_CORNER_ACCENT);
+        }
     }
 }

@@ -25,7 +25,6 @@ public abstract class Command extends Feature {
     public abstract void createArgumentBuilder(LiteralArgumentBuilder<CommandManager> builder);
 
     protected int success(String message, Object... format) {
-        sendMessage(message, format);
         return NO_OP;
     }
 
@@ -34,7 +33,6 @@ public abstract class Command extends Feature {
     }
 
     protected int fail(String message, Object... format) {
-        sendMessage("{red} " + message, format);
         return NO_OP;
     }
 

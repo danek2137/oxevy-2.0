@@ -6,16 +6,52 @@ plugins {
     id 'org.jetbrains.kotlin.jvm' version "$kotlin_version"
 }
 
+def requestedTasks = gradle.startParameter.taskNames
+def shouldBumpVersion = false
+for (taskName in requestedTasks) {
+    String lower = taskName.toLowerCase()
+    if (lower.contains('build') || lower.contains('assemble') || lower.contains('jar') ||
+            lower.contains('run') || lower.contains('processresources') || lower.contains('generatebuildconfig')) {
+        shouldBumpVersion = true
+        break
+    }
+}
+
+def versionPropsFile = file("gradle.properties")
+Properties versionProps = new Properties()
+versionPropsFile.withInputStream { versionProps.load(it) }
+
+def bumpVersion(String v) {
+    List<Integer> parts = v.tokenize('.').collect { Integer.parseInt(it) }
+    if (parts.isEmpty()) return "0.0.1"
+    int i = parts.size() - 1
+    parts.set(i, parts.get(i) + 1)
+    while (i > 0 && parts.get(i) >= 10) {
+        parts.set(i, 0)
+        i--
+        parts.set(i, parts.get(i) + 1)
+    }
+    return parts.join('.')
+}
+
+String rawModVersion = versionProps.getProperty('mod_version', '1.0.0')
+String oxevyModVersion = rawModVersion
+if (shouldBumpVersion) {
+    oxevyModVersion = bumpVersion(rawModVersion)
+    versionProps.setProperty('mod_version', oxevyModVersion)
+    versionProps.store(versionPropsFile.newWriter(), null)
+}
+
 var USING_GIT = Paths.get(System.getProperty("user.dir")).resolve(".git").toFile().exists()
 var GIT_HASH = execute("git rev-parse --short HEAD")
 
-version = project.mod_version
+version = oxevyModVersion
 group = project.maven_group
 
 buildConfig {
     buildConfigField(String, "NAME", project.mod_name)
     buildConfigField(String, "GROUP", project.group)
-    buildConfigField(String, "VERSION", project.mod_version)
+    buildConfigField(String, "VERSION", oxevyModVersion)
     buildConfigField(String, "BUILD_TIME", "${new Date(System.currentTimeMillis()).format("MM/dd/yyyy HH:mm")}")
     buildConfigField(Boolean, "USING_GIT", USING_GIT)
     buildConfigField(String, "HASH", GIT_HASH)
@@ -30,13 +66,14 @@ sourceSets.main.java.srcDirs += "build/gen/buildconfig/src/main"
 sourceSets.main.kotlin.srcDirs += "src/main/kotlin"
 
 base {
-    archivesName = "${project.archives_base_name}-${GIT_HASH}"
+    archivesName = "${project.archives_base_name}"
 }
 
 repositories {
     mavenCentral()
     maven { url = uri("https://maven.wispforest.io/releases/") }
     maven { url = uri("https://jitpack.io") }
+    maven { url = uri("https://maven.firstdark.dev/releases") }
 }
 
 loom {
@@ -47,7 +84,7 @@ dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-
+    implementation 'dev.firstdark.discordrpc:discord-rpc:1.0.4'
     // Fabric API
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 

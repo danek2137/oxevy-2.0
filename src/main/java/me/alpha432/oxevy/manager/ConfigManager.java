@@ -15,17 +15,120 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.awt.*;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class ConfigManager {
     private static final Logger LOGGER = LoggerFactory.getLogger("ConfigManager");
-    private static final Path OXEVEY_PATH = FabricLoader.getInstance().getGameDir().resolve("oxevy");
+    private static final Path BASE_PATH = FabricLoader.getInstance().getGameDir().resolve("oxevy");
+    private static final Path CONFIGS_PATH = BASE_PATH.resolve("configs");
+    private static final Path CURRENT_FILE = BASE_PATH.resolve("current.txt");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     private final List<Jsonable> jsonables = new LinkedList<>();
+    private String currentConfig = "default";
+
+    public ConfigManager() {
+        loadCurrentConfigName();
+    }
+
+    public String getCurrentConfig() {
+        return currentConfig;
+    }
+
+    public List<String> listConfigs() {
+        if (!CONFIGS_PATH.toFile().exists()) return List.of("default");
+        try (Stream<Path> dirs = Files.list(CONFIGS_PATH)) {
+            List<String> names = dirs.filter(Files::isDirectory)
+                    .map(p -> p.getFileName().toString())
+                    .sorted()
+                    .collect(Collectors.toList());
+            if (!names.contains("default")) names.add(0, "default");
+            return names;
+        } catch (IOException e) {
+            return List.of("default");
+        }
+    }
+
+    public boolean saveProfile(String name) {
+        mkdirs();
+        Path configDir = CONFIGS_PATH.resolve(name);
+        try {
+            Files.createDirectories(configDir);
+            for (Jsonable jsonable : jsonables) {
+                String fn = jsonable.getFileName();
+                if (fn == null || fn.isEmpty()) continue;
+                Files.writeString(configDir.resolve(fn), GSON.toJson(jsonable.toJson()));
+            }
+            return true;
+        } catch (IOException e) {
+            LOGGER.error("Failed to save profile '{}'", name, e);
+            return false;
+        }
+    }
+
+    public boolean loadProfile(String name) {
+        Path configDir = CONFIGS_PATH.resolve(name);
+        if (!configDir.toFile().exists()) return false;
+        for (Jsonable jsonable : jsonables) {
+            String fn = jsonable.getFileName();
+            if (fn == null || fn.isEmpty()) continue;
+            Path file = configDir.resolve(fn);
+            if (!file.toFile().exists()) continue;
+            try {
+                jsonable.fromJson(JsonParser.parseString(Files.readString(file)));
+            } catch (IOException e) {
+                LOGGER.error("Failed to load '{}' from profile '{}'", fn, name, e);
+            }
+        }
+        currentConfig = name;
+        saveCurrentConfigName();
+        return true;
+    }
+
+    public boolean deleteProfile(String name) {
+        if ("default".equals(name)) return false;
+        Path configDir = CONFIGS_PATH.resolve(name);
+        if (!configDir.toFile().exists()) return false;
+        try {
+            try (Stream<Path> files = Files.walk(configDir)) {
+                files.sorted(java.util.Comparator.reverseOrder())
+                        .forEach(p -> {
+                            try { Files.deleteIfExists(p); } catch (IOException ignored) {}
+                        });
+            }
+            if (currentConfig.equals(name)) {
+                currentConfig = "default";
+                saveCurrentConfigName();
+            }
+            return true;
+        } catch (IOException e) {
+            LOGGER.error("Failed to delete profile '{}'", name, e);
+            return false;
+        }
+    }
+
+    /** Zaps every config file from disk (used by destruct). */
+    public void wipeAll() {
+        try {
+            if (CONFIGS_PATH.toFile().exists()) {
+                try (Stream<Path> files = Files.walk(CONFIGS_PATH)) {
+                    files.sorted(java.util.Comparator.reverseOrder())
+                            .forEach(p -> {
+                                try { Files.deleteIfExists(p); } catch (IOException ignored) {}
+                            });
+                }
+            }
+            if (CURRENT_FILE.toFile().exists()) Files.deleteIfExists(CURRENT_FILE);
+        } catch (IOException e) {
+            LOGGER.error("Failed to wipe configs", e);
+        }
+    }
 
     public void addConfig(Jsonable jsonable) {
         jsonables.add(jsonable);
@@ -33,22 +136,31 @@ public class ConfigManager {
 
     public void load() {
         mkdirs();
+        Path configDir = CONFIGS_PATH.resolve(currentConfig);
+        if (!configDir.toFile().exists()) {
+            migrateOldFiles();
+            configDir = CONFIGS_PATH.resolve(currentConfig);
+        }
         for (Jsonable jsonable : jsonables) {
             try {
-                String read = Files.readString(OXEVEY_PATH.resolve(jsonable.getFileName()));
+                String read = Files.readString(configDir.resolve(jsonable.getFileName()));
                 jsonable.fromJson(JsonParser.parseString(read));
-            } catch (Throwable e) {
-                LOGGER.error("Failed to load", e);
-            }
+            } catch (Throwable ignored) {}
         }
     }
 
     public void save() {
         mkdirs();
+        Path configDir = CONFIGS_PATH.resolve(currentConfig);
+        try {
+            Files.createDirectories(configDir);
+        } catch (IOException e) {
+            LOGGER.error("Failed to create config directory", e);
+            return;
+        }
         for (Jsonable jsonable : jsonables) {
             try {
-                JsonElement json = jsonable.toJson();
-                Files.writeString(OXEVEY_PATH.resolve(jsonable.getFileName()), GSON.toJson(json));
+                Files.writeString(configDir.resolve(jsonable.getFileName()), GSON.toJson(jsonable.toJson()));
             } catch (Throwable e) {
                 LOGGER.error("Failed to write to file", e);
             }
@@ -56,15 +168,56 @@ public class ConfigManager {
     }
 
     public Path getConfigFolder() {
-        return OXEVEY_PATH;
+        return BASE_PATH;
     }
 
     private void mkdirs() {
-        if (!OXEVEY_PATH.toFile().exists()) {
-            boolean success = OXEVEY_PATH.toFile().mkdirs();
-            if (!success) {
-                throw new RuntimeException("Failed to create needed directories!");
+        if (!BASE_PATH.toFile().exists()) {
+            boolean success = BASE_PATH.toFile().mkdirs();
+            if (!success) throw new RuntimeException("Failed to create needed directories!");
+        }
+    }
+
+    private void loadCurrentConfigName() {
+        try {
+            if (CURRENT_FILE.toFile().exists()) {
+                currentConfig = Files.readString(CURRENT_FILE).trim();
             }
+        } catch (IOException e) {
+            currentConfig = "default";
+        }
+    }
+
+    private void saveCurrentConfigName() {
+        try {
+            mkdirs();
+            Files.writeString(CURRENT_FILE, currentConfig);
+        } catch (IOException e) {
+            LOGGER.error("Failed to save current config name", e);
+        }
+    }
+
+    private void migrateOldFiles() {
+        if (CONFIGS_PATH.toFile().exists()) return;
+        Path modulesFile = BASE_PATH.resolve("modules.json");
+        if (!modulesFile.toFile().exists()) return;
+        Path defaultDir = CONFIGS_PATH.resolve("default");
+        try {
+            Files.createDirectories(defaultDir);
+            try (Stream<Path> files = Files.list(BASE_PATH)) {
+                files.filter(f -> f.toString().endsWith(".json"))
+                        .filter(f -> !"current.txt".equals(f.getFileName().toString()))
+                        .forEach(f -> {
+                            try {
+                                Path dest = defaultDir.resolve(f.getFileName());
+                                if (!dest.toFile().exists()) Files.move(f, dest);
+                            } catch (IOException ignored) {}
+                        });
+            }
+            currentConfig = "default";
+            saveCurrentConfigName();
+        } catch (IOException e) {
+            LOGGER.error("Failed to migrate old config files", e);
         }
     }
 

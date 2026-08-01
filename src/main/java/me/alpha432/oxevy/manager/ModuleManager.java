@@ -37,6 +37,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new ClientSpoof());
         register(new fakeplayer());
         register(new RPCModule());
+        register(new WebClickGuiModule());
 
         // COMBAT
         register(new KillAuraModule());
@@ -51,6 +52,8 @@ public class ModuleManager implements Jsonable, Util {
         register(new AutoTrapModule());
         register(new HitboxesModule());
         register(new ReachModule());
+        register(new KomarModule());
+        register(new SurroundModule());
 
         // HUD
         register(new WatermarkHudModule());
@@ -98,6 +101,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new AutoSwimModule());
         register(new GlideModule());
         register(new FastLadderModule());
+        register(new AirstuckModule());
 
         // PLAYER
         register(new FastPlaceModule());
@@ -111,6 +115,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new AutoClickerModule());
         register(new AutoRespawnModule());
         register(new BaseFinderPlusModule());
+        register(new FakeGameModeModule());
 
         // RENDER
         register(new BlockHighlightModule());
@@ -151,9 +156,6 @@ public class ModuleManager implements Jsonable, Util {
         register(new TrailModule());
         register(new EntityOwnerModule());
         register(new ItemPhysicsModule());
-
-        // COMBAT
-        register(new SurroundModule());
 
         // Set default enabled modules
         FpsHudModule fps = (FpsHudModule) getModuleByClass(FpsHudModule.class);

@@ -1,96 +1,95 @@
 package com.oxevy.safemod.discord;
 
-import org.apache.logging.log4j.Logger;
+import dev.firstdark.rpc.DiscordRpc;
+import dev.firstdark.rpc.enums.ActivityType;
+import dev.firstdark.rpc.enums.ErrorCode;
+import dev.firstdark.rpc.handlers.RPCEventHandler;
+import dev.firstdark.rpc.models.DiscordRichPresence;
+import dev.firstdark.rpc.models.User;
 import org.apache.logging.log4j.LogManager;
-
-import java.lang.reflect.Method;
+import org.apache.logging.log4j.Logger;
+import org.slf4j.helpers.NOPLogger;
 
 public class DiscordRpcManager {
     private static final Logger LOG = LogManager.getLogger();
+    private static final String DEFAULT_CLIENT_ID = "1531698504605630554";
+    private static DiscordRpc rpc;
     private static boolean enabled = false;
-    private static Class<?> rpcClass = null;
 
-    // Attempts to initialize Discord RPC via reflection to avoid hard dependency.
     public static void init(String clientId) {
+        if (enabled && rpc != null) return;
+
         if (clientId == null || clientId.isEmpty()) {
-            LOG.info("Discord RPC: empty clientId, skipping init.");
-            return;
+            clientId = DEFAULT_CLIENT_ID;
         }
 
-        // Try a few common class names that libraries might expose.
-        String[] candidateClasses = new String[] {
-            "com.discord.rpc.DiscordRPC",
-            "net.dhleong.discordrpc.DiscordRPC",
-            "org.javacord.api.DiscordRPC" // (Note: placeholder; real name varies)
+        rpc = new DiscordRpc();
+        rpc.setDebugMode(false);
+        rpc.setLogger(NOPLogger.NOP_LOGGER);
+
+        RPCEventHandler handler = new RPCEventHandler() {
+            @Override
+            public void ready(User user) {
+                LOG.info("Discord RPC ready");
+            }
+
+            @Override
+            public void disconnected(ErrorCode errorCode, String message) {
+            }
+
+            @Override
+            public void errored(ErrorCode errorCode, String message) {
+            }
         };
 
-        for (String className : candidateClasses) {
-            try {
-                Class<?> cls = Class.forName(className);
-                // Try common init methods
-                // 1) initialize(String)
-                try {
-                    Method m = cls.getMethod("initialize", String.class);
-                    m.invoke(null, clientId);
-                    enabled = true;
-                    rpcClass = cls;
-                    LOG.info("Discord RPC initialized using " + className);
-                    return;
-                } catch (NoSuchMethodException ignored) { /* try next */ }
-
-                // 2) start(String)
-                try {
-                    Method m = cls.getMethod("start", String.class);
-                    m.invoke(null, clientId);
-                    enabled = true;
-                    rpcClass = cls;
-                    LOG.info("Discord RPC initialized using " + className);
-                    return;
-                } catch (NoSuchMethodException ignored) { /* try next */ }
-            } catch (ClassNotFoundException e) {
-                // try next candidate
-            } catch (Exception e) {
-                LOG.error("Discord RPC initialization error with " + className, e);
-            }
-        }
-
-        if (!enabled) {
-            LOG.info("Discord RPC library not found on classpath. Rich Presence disabled.");
+        try {
+            rpc.init(clientId, handler, false);
+            enabled = true;
+        } catch (Exception e) {
+            LOG.debug("Discord RPC not available (Discord may not be running)");
+            rpc = null;
         }
     }
 
-    // Update presence if library is loaded
     public static void updatePresence(String details, String state) {
-        if (!enabled || rpcClass == null) return;
-        try {
-            // Try static updatePresence method: updatePresence(String, String)
-            try {
-                Method m = rpcClass.getMethod("updatePresence", String.class, String.class);
-                m.invoke(null, details, state);
-                return;
-            } catch (NoSuchMethodException ignored) { /* try instance method */ }
+        if (!enabled || rpc == null) return;
 
-            // Try instance-based if library exposes INSTANCE
-            try {
-                Object instance = rpcClass.getField("INSTANCE").get(null);
-                Method m = rpcClass.getMethod("updatePresence", String.class, String.class);
-                m.invoke(instance, details, state);
-            } catch (Exception ignored) {
-                // give up
-            }
-        } catch (Exception e) {
-            LOG.error("Discord RPC: failed to update presence", e);
-        }
+        DiscordRichPresence presence = DiscordRichPresence.builder()
+                .details(details)
+                .state(state)
+                .activityType(ActivityType.PLAYING)
+                .build();
+
+        rpc.updatePresence(presence);
     }
 
-    // Shutdown RPC cleanly
-    public static void shutdown() {
-        if (!enabled || rpcClass == null) return;
-        try {
-            Method m = rpcClass.getMethod("shutdown");
-            m.invoke(null);
-        } catch (Exception e) {
-            LOG.warn("Discord RPC: shutdown failed", e);
+    public static void updatePresence(String details, String state, String largeImageKey) {
+        if (!enabled || rpc == null) return;
+
+        var builder = DiscordRichPresence.builder()
+                .details(details)
+                .state(state)
+                .activityType(ActivityType.PLAYING);
+
+        if (largeImageKey != null && !largeImageKey.isEmpty()) {
+            builder.largeImageKey(largeImageKey);
         }
+
+        rpc.updatePresence(builder.build());
+    }
+
+    public static void shutdown() {
+        if (rpc != null) {
+            try {
+                rpc.shutdown();
+            } catch (Exception e) {
+            }
+            rpc = null;
+        }
+        enabled = false;
+    }
+
+    public static boolean isEnabled() {
+        return enabled;
     }
 }

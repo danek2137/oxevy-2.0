@@ -24,7 +24,6 @@ public class ArrayListHudModule extends HudModule {
     public final Setting<Boolean> rainbow = bool("Rainbow", false);
     public final Setting<Boolean> smoothAnimations = bool("SmoothAnimations", true);
     public final Setting<Float> animationSpeed = num("AnimationSpeed", 0.15f, 0.05f, 0.5f);
-    public final Setting<Boolean> background = bool("Background", true);
     public final Setting<Boolean> bar = bool("Bar", true);
     public final Setting<Boolean> icons = bool("Icons", true);
     public final Setting<Boolean> shadow = bool("Shadow", true);
@@ -40,6 +39,7 @@ public class ArrayListHudModule extends HudModule {
 
     public ArrayListHudModule() {
         super("ArrayList", "Shows enabled modules", 100, 50);
+        pos.setValue(new org.joml.Vector2f(0.01f, 0.11f));
     }
 
     @Override
@@ -125,25 +125,16 @@ public class ArrayListHudModule extends HudModule {
             float alpha = currentAnim;
 
             int textX;
-            int bgStart, bgEnd, barStart, barEnd;
+            int barStart, barEnd;
 
             if (isLeft) {
                 textX = (int) (x + offset + slide);
-                bgStart = (int) (x + slide);
-                bgEnd = (int) (x + textWidth + offset + 6 + slide);
                 barStart = (int) (x + slide);
                 barEnd = (int) (x + 3 + slide);
             } else {
                 textX = (int) (x + getWidth() - textWidth - offset + slide);
-                bgStart = (int) (x + getWidth() - textWidth - offset - 6 + slide);
-                bgEnd = (int) (x + getWidth() + slide);
                 barStart = (int) (x + getWidth() - 3 + slide);
                 barEnd = (int) (x + getWidth() + slide);
-            }
-
-            if (background.getValue()) {
-                int bgColor = new Color(13, 16, 22, (int)(180 * alpha)).getRGB();
-                RenderUtil.rect(ctx, bgStart, drawY, bgEnd, drawY + lineHeight + customSpacing, bgColor);
             }
 
             if (bar.getValue()) {

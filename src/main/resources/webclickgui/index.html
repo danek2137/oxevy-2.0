@@ -8,6 +8,8 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
   <div id="root"></div>
@@ -27,10 +29,22 @@ const API = {
   async setSetting(mod, setting, value) {
     const r = await fetch("/api/setting", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({module:mod, setting, value}) });
     return r.json();
+  },
+  async getCapeState() {
+    const r = await fetch("/api/capes/state");
+    return r.json();
+  },
+  async getRepoCapes() {
+    const r = await fetch("/api/capes/repo");
+    return r.json();
+  },
+  async selectCape(opts) {
+    const r = await fetch("/api/cape/select", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(opts) });
+    return r.json();
   }
 };
 
-function Sidebar({ categories, activeKey, onSelect }) {
+function Sidebar({ categories, activeKey, onSelect, onCapeClick, showCape }) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -39,10 +53,15 @@ function Sidebar({ categories, activeKey, onSelect }) {
       <div className="sidebar-list">
         {categories.map(cat => (
           <button key={cat.key} className={"sidebar-item"+(cat.key===activeKey?" active":"")} onClick={()=>onSelect(cat.key)} title={cat.name}>
-            {cat.name.slice(0,2).toUpperCase()}
+            <span style={{fontFamily:"Wexside",fontSize:20}}>{cat.icon||cat.name.slice(0,2).toUpperCase()}</span>
+            <span className="icon-label">{cat.shortName||cat.name.slice(0,2).toUpperCase()}</span>
             {cat.enabledCount>0&&<span className="sidebar-count">{cat.enabledCount>9?"9+":cat.enabledCount}</span>}
           </button>
         ))}
+        <button className={"sidebar-item cape-btn"+(showCape?" active":"")} onClick={onCapeClick} title="Capes">
+          <span style={{fontSize:18}}>C</span>
+          <span className="icon-label">CP</span>
+        </button>
       </div>
     </aside>
   );
@@ -177,6 +196,189 @@ function SettingsDrawer({ mod, onToggle, onSettingChange, onClose }) {
   );
 }
 
+function Cape3DPreview({ url }) {
+  const containerRef = useRef(null);
+  const sceneRef = useRef(null);
+  const capeMeshRef = useRef(null);
+  const animRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const w = containerRef.current.clientWidth;
+    const h = 240;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d1016);
+
+    const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 10);
+    camera.position.set(0, 0.6, 2.5);
+    camera.lookAt(0, 0.5, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    containerRef.current.appendChild(renderer.domElement);
+
+    // Lights
+    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambient);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    dir.position.set(1, 2, 1);
+    scene.add(dir);
+    const back = new THREE.DirectionalLight(0x88aaff, 0.4);
+    back.position.set(-1, 0, -1);
+    scene.add(back);
+
+    // Player body
+    const bodyMat = new THREE.MeshPhongMaterial({ color: 0x3b82f6 });
+    const headMat = new THREE.MeshPhongMaterial({ color: 0xfbbf24 });
+    const armMat = new THREE.MeshPhongMaterial({ color: 0x3b82f6 });
+    const legMat = new THREE.MeshPhongMaterial({ color: 0x1e40af });
+    const skinMat = new THREE.MeshPhongMaterial({ color: 0xf5d6b8 });
+
+    const group = new THREE.Group();
+
+    // Head
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), headMat);
+    head.position.set(0, 1.15, 0);
+    group.add(head);
+
+    // Helmet layer (slightly larger)
+    const helmet = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.44, 0.44), new THREE.MeshPhongMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.15 }));
+    helmet.position.copy(head.position);
+    group.add(helmet);
+
+    // Body (torso)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.2), bodyMat);
+    body.position.set(0, 0.7, 0);
+    group.add(body);
+
+    // Left arm
+    const lArm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.45, 0.12), armMat);
+    lArm.position.set(-0.28, 0.75, 0);
+    group.add(lArm);
+
+    // Right arm
+    const rArm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.45, 0.12), armMat);
+    rArm.position.set(0.28, 0.75, 0);
+    group.add(rArm);
+
+    // Legs
+    const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.45, 0.12), legMat);
+    lLeg.position.set(-0.1, 0.23, 0);
+    group.add(lLeg);
+
+    const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.45, 0.12), legMat);
+    rLeg.position.set(0.1, 0.23, 0);
+    group.add(rLeg);
+
+    scene.add(group);
+
+    // Cape
+    const capeGeo = new THREE.PlaneGeometry(0.5, 0.65);
+    const capeMat = new THREE.MeshPhongMaterial({
+      color: 0x888888,
+      side: THREE.DoubleSide,
+      transparent: true,
+    });
+    const cape = new THREE.Mesh(capeGeo, capeMat);
+    cape.position.set(0, 0.65, -0.12);
+    scene.add(cape);
+    capeMeshRef.current = cape;
+
+    // Floor shadow
+    const shadowMat = new THREE.MeshPhongMaterial({ color: 0x000000, transparent: true, opacity: 0.2 });
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 16), shadowMat);
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.set(0, -0.02, 0);
+    scene.add(shadow);
+
+    // Orbit controls for interaction
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableZoom = false;
+    controls.enablePan = false;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 2;
+    controls.target.set(0, 0.5, 0);
+    controls.update();
+
+    const animate = () => {
+      animRef.current = requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    sceneRef.current = { scene, camera, renderer, controls };
+
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      controls.dispose();
+      renderer.dispose();
+      if (containerRef.current && renderer.domElement.parentElement === containerRef.current) {
+        containerRef.current.removeChild(renderer.domElement);
+      }
+    };
+  }, []);
+
+  // Update cape texture when URL changes
+  useEffect(() => {
+    if (!capeMeshRef.current || !url) return;
+    const loader = new THREE.TextureLoader();
+    loader.load(url, tex => {
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      capeMeshRef.current.material.map = tex;
+      capeMeshRef.current.material.color.set(0xffffff);
+      capeMeshRef.current.material.needsUpdate = true;
+    }, undefined, () => {
+      // on error - keep the gray color
+    });
+  }, [url]);
+
+  return <div ref={containerRef} className="cape-3d-preview" />;
+}
+
+function CapePanel({ capeData, repoData, onSelectCape }) {
+  const [viewCapeUrl, setViewCapeUrl] = useState(null);
+  const textStyle = { color: "var(--muted)", textAlign: "center", padding: "24px", fontSize: "13px" };
+  return (
+    <section className="main-panel">
+      <div className="panel-head">
+        <div><h1>Cape Selection</h1><p>Choose your cape</p></div>
+      </div>
+      <div className="cape-layout">
+        <div className="cape-list-col">
+          {(!repoData || !repoData.capes || repoData.capes.length === 0) ? (
+            <div style={textStyle}>Loading capes from repository...</div>
+          ) : (
+            <div className="cape-grid">
+              {repoData.capes.map(c => {
+                const activeUrl = capeData ? (capeData.customUrl || (capeData.capes && capeData.capes[capeData.activeIndex] && capeData.capes[capeData.activeIndex].url) || "") : "";
+                const isActive = c.url === activeUrl;
+                return (
+                  <div key={c.index} className={"cape-card"+(isActive?" active":"")} onClick={() => { onSelectCape(c.index); setViewCapeUrl(c.url); }}>
+                    <div className="cape-thumb-wrap">
+                      <img src={c.url} alt={c.name} className="cape-thumb" crossOrigin="anonymous" onError={e=>{e.target.style.display="none"}} />
+                    </div>
+                    <span className="cape-name">{c.name}</span>
+                    {isActive && <span className="cape-badge">Active</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {capeData && capeData.mode === "NONE" && !repoData?.capes?.length && (
+            <div style={textStyle}>No capes available. Add capes to the oxevy-assets repo.</div>
+          )}
+        </div>
+        <div className="cape-preview-col">
+          <Cape3DPreview url={viewCapeUrl} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function MainPanel({ categories, activeKey, selectedId, onToggle, onSelectModule, search, onSearch }) {
   const cat=categories.find(c=>c.key===activeKey);
   const raw=cat?cat.modules:[];
@@ -198,22 +400,43 @@ function MainPanel({ categories, activeKey, selectedId, onToggle, onSelectModule
 
 function App() {
   const [data,setData]=useState(null);
+  const [capeData,setCapeData]=useState(null);
+  const [repoData,setRepoData]=useState(null);
   const [activeKey,setActiveKey]=useState(null);
   const [selectedId,setSelectedId]=useState(null);
   const [search,setSearch]=useState("");
+  const [showCape,setShowCape]=useState(false);
 
   const load=useCallback(async()=>{
     try{const d=await API.getState();setData(d);if(!activeKey&&d.categories.length)setActiveKey(d.categories[0].key);}catch(e){console.error(e)}
   },[activeKey]);
 
+  const loadCape=useCallback(async()=>{
+    try{const d=await API.getCapeState();setCapeData(d);}catch(e){console.error(e)}
+  },[]);
+
+  const loadRepo=useCallback(async()=>{
+    try{const d=await API.getRepoCapes();setRepoData(d);}catch(e){console.error(e)}
+  },[]);
+
   useEffect(()=>{load()},[load]);
+  useEffect(()=>{loadCape()},[loadCape]);
+  useEffect(()=>{loadRepo()},[loadRepo]);
 
   useEffect(()=>{const i=setInterval(load,2000);return ()=>clearInterval(i)},[load]);
+  useEffect(()=>{const i=setInterval(loadCape,2000);return ()=>clearInterval(i)},[loadCape]);
+  useEffect(()=>{const i=setInterval(loadRepo,5000);return ()=>clearInterval(i)},[loadRepo]);
 
   const hToggle=useCallback(async(id)=>{setData(await API.toggle(id));},[]);
   const hSetting=useCallback(async(modId,setId,val)=>{setData(await API.setSetting(modId,setId,val));},[]);
   const hSelect=useCallback((id)=>{setSelectedId(p=>p===id?null:id);},[]);
-  const hCategory=useCallback((k)=>{setActiveKey(k);setSelectedId(null);},[]);
+  const hCategory=useCallback((k)=>{setActiveKey(k);setSelectedId(null);setShowCape(false);},[]);
+  const hCapeClick=useCallback(()=>{setShowCape(p=>!p);setSelectedId(null);},[]);
+
+  const hCapeSelect=useCallback(async(repoIndex)=>{
+    await API.selectCape({repoIndex});
+    loadCape();
+  },[]);
 
   if(!data)return <div className="loading">Connecting to Oxevy...</div>;
 
@@ -221,8 +444,12 @@ function App() {
 
   return (
     <div className="shell">
-      <Sidebar categories={data.categories} activeKey={activeKey} onSelect={hCategory} />
-      <MainPanel categories={data.categories} activeKey={activeKey} selectedId={selectedId} onToggle={hToggle} onSelectModule={hSelect} search={search} onSearch={setSearch} />
+      <Sidebar categories={data.categories} activeKey={showCape?"_cape":activeKey} onSelect={hCategory} onCapeClick={hCapeClick} showCape={showCape} />
+      {showCape ? (
+        <CapePanel capeData={capeData} repoData={repoData} onSelectCape={hCapeSelect} />
+      ) : (
+        <MainPanel categories={data.categories} activeKey={activeKey} selectedId={selectedId} onToggle={hToggle} onSelectModule={hSelect} search={search} onSearch={setSearch} />
+      )}
       <SettingsDrawer mod={findMod(selectedId)} onToggle={hToggle} onSettingChange={hSetting} onClose={()=>setSelectedId(null)} />
     </div>
   );

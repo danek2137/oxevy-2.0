@@ -5,12 +5,16 @@ import me.alpha432.oxevy.event.impl.render.Render2DEvent;
 import me.alpha432.oxevy.event.impl.render.Render3DEvent;
 import me.alpha432.oxevy.features.modules.Module;
 import me.alpha432.oxevy.features.settings.Setting;
+import me.alpha432.oxevy.util.player.PlayerBadges;
 import me.alpha432.oxevy.util.render.NametagUtils;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import org.joml.Vector3d;
 
 import java.util.ArrayList;
@@ -27,32 +31,43 @@ public class NameTagsModule extends Module {
     public final Setting<Boolean> ping = bool("Ping", true);
     public final Setting<Boolean> distance = bool("Distance", false);
     public final Setting<Boolean> gamemode = bool("Gamemode", false);
-    public final Setting<Boolean> healthBar = bool("HealthBar", true);
     public final Setting<Boolean> armor = bool("Armor", true);
     public final Setting<Boolean> watermark = bool("Watermark", true);
     public final Setting<Boolean> shadow = bool("Shadow", true);
     public final Setting<Boolean> players = bool("Players", true);
     public final Setting<Boolean> mobs = bool("Mobs", false);
 
-    private final List<Entity> renderList = new ArrayList<>();
+    private static final int BACKGROUND_COLOR = 0x90000000;
+    private static final int ACCENT_COLOR = 0xFF00FF66;
+    private static final int TEXT_COLOR = 0xFFFFFFFF;
+    private static final int ARMOR_BG_COLOR = 0x80000000;
+
+    private final List<Entity> targets = new ArrayList<>();
     private final Vector3d pos = new Vector3d();
 
     public NameTagsModule() {
         super("NameTags", "Custom name tags above entities", Category.RENDER);
     }
 
-    public float getScale() { return scale.getValue(); }
-    public boolean isUnlimitedRange() { return isEnabled() && unlimitedRange.getValue(); }
-    public boolean isSeeThrough() { return false; }
+    public float getScale() {
+        return scale.getValue();
+    }
+
+    public boolean isUnlimitedRange() {
+        return isEnabled() && unlimitedRange.getValue();
+    }
+
+    public boolean isSeeThrough() {
+        return false;
+    }
 
     @Override
     public void onRender3D(Render3DEvent event) {
-        if (!isEnabled()) return;
-        if (mc.level == null || mc.player == null) return;
+        if (!isEnabled() || mc.level == null || mc.player == null) return;
 
-        NametagUtils.onRender(event.getMatrix(), event.getProjectionMatrix());
+        NametagUtils.onRender(event.getProjectionMatrix(), event.getPositionMatrix());
 
-        renderList.clear();
+        targets.clear();
         double maxDist = unlimitedRange.getValue() ? Double.MAX_VALUE : range.getValue() * range.getValue();
 
         for (Entity entity : mc.level.entitiesForRendering()) {
@@ -60,97 +75,152 @@ public class NameTagsModule extends Module {
             if (!players.getValue() && entity.getType() == EntityType.PLAYER) continue;
             if (!mobs.getValue() && entity.getType() != EntityType.PLAYER) continue;
             if (entity.distanceToSqr(mc.player) > maxDist) continue;
-
             if (entity instanceof Player player && ignoreFriends.getValue() && Oxevy.friendManager.isFriend(player)) continue;
-
-            renderList.add(entity);
+            targets.add(entity);
         }
 
-        renderList.sort(Comparator.comparingDouble(e -> e.distanceToSqr(mc.player)));
+        targets.sort(Comparator.comparingDouble(entity -> entity.distanceToSqr(mc.player)));
     }
 
     @Override
     public void onRender2D(Render2DEvent event) {
-        if (!isEnabled()) return;
-        if (mc.level == null || mc.player == null) return;
+        if (!isEnabled() || mc.level == null || mc.player == null) return;
 
         GuiGraphics ctx = event.getContext();
 
-        for (Entity entity : renderList) {
+        for (Entity entity : targets) {
             pos.set(entity.getX(), entity.getY() + entity.getBbHeight() + 0.5, entity.getZ());
-
             if (!NametagUtils.to2D(pos, scale.getValue())) continue;
 
             if (entity instanceof Player player) {
-                renderNametagPlayer(ctx, player);
+                renderNametag(ctx, player);
+            } else if (entity instanceof LivingEntity) {
+                renderEntityTag(ctx, entity);
             }
         }
     }
 
-    private void renderNametagPlayer(GuiGraphics ctx, Player player) {
+    private void renderEntityTag(GuiGraphics ctx, Entity entity) {
         NametagUtils.begin(pos, ctx);
 
-        StringBuilder sb = new StringBuilder();
+        String name = entity.getName().getString();
+        int width = mc.font.width(name);
+        int lineHeight = mc.font.lineHeight;
+
+        int boxX = -width / 2 - 4;
+        int boxY = -lineHeight - 2;
+        int boxW = width + 8;
+        int boxH = lineHeight + 4;
+
+        ctx.fill(boxX, boxY, boxX + boxW, boxY + boxH, BACKGROUND_COLOR);
+        ctx.fill(boxX, boxY, boxX + boxW, boxY + 1, ACCENT_COLOR);
+        ctx.drawString(mc.font, name, -width / 2, -lineHeight, TEXT_COLOR, shadow.getValue());
+
+        NametagUtils.end(ctx);
+    }
+
+    private void renderNametag(GuiGraphics ctx, Player player) {
+        NametagUtils.begin(pos, ctx);
+
+        String line = buildLine(player);
+        int width = mc.font.width(line);
+        int lineHeight = mc.font.lineHeight;
+
+        int boxX = -width / 2 - 4;
+        int boxY = -lineHeight - 2;
+        int boxW = width + 8;
+        int boxH = lineHeight + 4;
+
+        ctx.fill(boxX, boxY, boxX + boxW, boxY + boxH, BACKGROUND_COLOR);
+        ctx.fill(boxX, boxY, boxX + boxW, boxY + 1, ACCENT_COLOR);
+        ctx.drawString(mc.font, line, -width / 2, -lineHeight, TEXT_COLOR, shadow.getValue());
+
+        if (armor.getValue()) {
+            drawItems(ctx, player);
+        }
+
+        NametagUtils.end(ctx);
+    }
+
+    private String buildLine(Player player) {
+        StringBuilder line = new StringBuilder();
+        line.append(buildPrefix(player));
+        line.append(player.getGameProfile().name());
+        line.append(buildSuffix(player));
+        return line.toString();
+    }
+
+    private String buildPrefix(Player player) {
+        StringBuilder prefix = new StringBuilder();
 
         if (gamemode.getValue()) {
-            var conn = mc.getConnection();
-            if (conn != null) {
-                PlayerInfo info = conn.getPlayerInfo(player.getUUID());
-                if (info != null && info.getGameMode() != null) {
-                    sb.append("[").append(info.getGameMode().getName().charAt(0)).append("] ");
-                }
+            PlayerInfo info = getPlayerInfo(player);
+            if (info != null && info.getGameMode() != null) {
+                prefix.append("[").append(info.getGameMode().getName().charAt(0)).append("] ");
             }
         }
 
-        if (watermark.getValue() && !player.getUUID().equals(mc.player.getUUID())) {
-            sb.append("O ");
+        if (watermark.getValue() && (player.getUUID().equals(mc.player.getUUID()) || Oxevy.oxevyUsersManager.isKnown(player))) {
+            prefix.append("O ");
         }
 
-        sb.append(player.getGameProfile().name());
+        String badge = PlayerBadges.getBadge(player);
+        if (!badge.isEmpty()) {
+            prefix.append(badge).append(" ");
+        }
+
+        return prefix.toString();
+    }
+
+    private String buildSuffix(Player player) {
+        StringBuilder suffix = new StringBuilder();
 
         if (showHealth.getValue()) {
             int health = Math.round(player.getHealth() + player.getAbsorptionAmount());
-            sb.append(" ").append(health);
+            suffix.append(" ").append(health);
         }
 
         if (ping.getValue()) {
-            var conn = mc.getConnection();
-            if (conn != null) {
-                PlayerInfo info = conn.getPlayerInfo(player.getUUID());
-                if (info != null) {
-                    sb.append(" [").append(info.getLatency()).append("ms]");
-                }
+            PlayerInfo info = getPlayerInfo(player);
+            if (info != null) {
+                suffix.append(" [").append(info.getLatency()).append("ms]");
             }
         }
 
         if (distance.getValue()) {
             double dist = Math.round(mc.player.distanceTo(player) * 10) / 10.0;
-            sb.append(" ").append(dist).append("m");
+            suffix.append(" ").append(dist).append("m");
         }
 
-        String text = sb.toString();
-        int textWidth = mc.font.width(text);
-        int textHeight = mc.font.lineHeight;
+        return suffix.toString();
+    }
 
-        int bgX = -textWidth / 2 - 4;
-        int bgY = -textHeight - 2;
-        int bgW = textWidth + 8;
-        int bgH = textHeight + 4;
+    private void drawItems(GuiGraphics ctx, Player player) {
+        List<ItemStack> items = new ArrayList<>();
+        items.add(player.getItemBySlot(EquipmentSlot.HEAD));
+        items.add(player.getItemBySlot(EquipmentSlot.CHEST));
+        items.add(player.getItemBySlot(EquipmentSlot.LEGS));
+        items.add(player.getItemBySlot(EquipmentSlot.FEET));
+        items.add(player.getMainHandItem());
 
-        ctx.fill(bgX, bgY, bgX + bgW, bgY + bgH, 0x90000000);
-        ctx.fill(bgX, bgY, bgX + bgW, bgY + 1, 0xFF00FF66);
-        ctx.drawString(mc.font, text, -textWidth / 2, -textHeight, 0xFFFFFFFF, shadow.getValue());
+        items.removeIf(ItemStack::isEmpty);
+        if (items.isEmpty()) return;
 
-        if (armor.getValue()) {
-            int armorVal = player.getArmorValue();
-            if (armorVal > 0) {
-                String armorText = " " + armorVal + " \u2694";
-                int armorWidth = mc.font.width(armorText);
-                ctx.fill(-armorWidth / 2 - 2, bgY - textHeight - 4, armorWidth / 2 + 2, bgY - textHeight, 0x80000000);
-                ctx.drawString(mc.font, armorText, -armorWidth / 2, bgY - textHeight - 2, 0xFF888888, shadow.getValue());
-            }
+        int iconSize = 16;
+        int gap = 1;
+        int totalWidth = items.size() * iconSize + (items.size() - 1) * gap;
+        int x = -totalWidth / 2;
+        int y = 6;
+
+        ctx.fill(x - 1, y - 1, x + totalWidth + 1, y + iconSize + 1, ARMOR_BG_COLOR);
+        for (ItemStack stack : items) {
+            ctx.renderItem(stack, x, y);
+            x += iconSize + gap;
         }
+    }
 
-        NametagUtils.end(ctx);
+    private PlayerInfo getPlayerInfo(Player player) {
+        if (mc.getConnection() == null) return null;
+        return mc.getConnection().getPlayerInfo(player.getUUID());
     }
 }

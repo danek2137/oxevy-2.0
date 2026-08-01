@@ -116,5 +116,20 @@ gradle-app.setting
 run/
 runs/
 assets/
+sample-modules-and-rendering/
 # Avoid ignoring Gradle wrapper jar file (.jar files are usually ignored)
 !gradle-wrapper.jar
+
+# Project-specific
+.wrangler/
+mod/
+bin/
+sounds/
+*.log
+log.txt
+logs.txt
+session-*.md
+fonts/
+20260603-1.json
+*.json~
+*.json.bak

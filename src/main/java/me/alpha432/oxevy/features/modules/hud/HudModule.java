@@ -12,17 +12,11 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.ChatScreen;
 import org.joml.Vector2f;
 
-import java.awt.*;
-
 public abstract class HudModule extends Module {
     public final Setting<Vector2f> pos = vec2f("Position", 0.1f, 0.1f);
-    public final Setting<Boolean> background = bool("Background", false);
     public final Setting<Boolean> blur = bool("Blur", false);
     public final Setting<Boolean> rounded = bool("Rounded", true);
     public final Setting<Float> radius = num("Radius", 4.0f, 0.0f, 10.0f);
-    public final Setting<Color> bgColor = color("BGColor", 0, 0, 0, 160);
-    public final Setting<Boolean> outline = bool("Outline", true);
-    public final Setting<Color> outlineColor = color("OutlineColor", 255, 255, 255, 100);
 
     // Pose settings
     public final Setting<Boolean> modifyPose = bool("Modify Pose", false);
@@ -106,8 +100,6 @@ public abstract class HudModule extends Module {
             context.pose().translate(-(x + width / 2f), -(y + height / 2f));
         }
 
-        drawBackground(context, x, y);
-
         if (mc.screen instanceof HudEditorScreen) {
             boolean isThisDragging = HudEditorScreen.getInstance().currentDragging == this;
             int borderColor = isThisDragging ? ClickGuiModule.getInstance().color.getValue().getRGB() : 0x55FFFFFF;
@@ -130,27 +122,6 @@ public abstract class HudModule extends Module {
         hoverAnim = me.alpha432.oxevy.util.render.AnimationUtil.animate(hoverAnim, target, 0.1f);
     }
     
-    protected void drawBackground(GuiGraphics context, float x, float y) {
-        if (!background.getValue()) return;
-        
-        int color = bgColor.getValue().getRGB();
-        if (rounded.getValue()) {
-            RenderUtil.roundRect(context, x - 2, y - 2, width + 4, height + 4, radius.getValue(), color);
-            if (outline.getValue()) {
-                // Simplified outline for rounded rect
-                RenderUtil.rect(context, x - 2, y - 2, x + width + 2, y - 1, outlineColor.getValue().getRGB());
-                RenderUtil.rect(context, x - 2, y + height + 1, x + width + 2, y + height + 2, outlineColor.getValue().getRGB());
-                RenderUtil.rect(context, x - 2, y - 2, x - 1, y + height + 2, outlineColor.getValue().getRGB());
-                RenderUtil.rect(context, x + width + 1, y - 2, x + width + 2, y + height + 2, outlineColor.getValue().getRGB());
-            }
-        } else {
-            RenderUtil.rect(context, x - 2, y - 2, x + width + 2, y + height + 2, color);
-            if (outline.getValue()) {
-                RenderUtil.rect(context, x - 2, y - 2, x + width + 2, y + height + 2, outlineColor.getValue().getRGB(), 1.0f);
-            }
-        }
-    }
-
     @Subscribe
     public void onMouse(MouseInputEvent e) {
         if (!(mc.screen instanceof HudEditorScreen) || nullCheck()) return;

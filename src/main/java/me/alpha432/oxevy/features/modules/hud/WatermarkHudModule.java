@@ -8,7 +8,6 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
 
 public class WatermarkHudModule extends HudModule {
-    public Setting<Boolean> background = bool("Background", true);
     public Setting<Boolean> shadow = bool("Shadow", true);
     public Setting<Float> scale = num("Scale", 1.0f, 0.25f, 3.0f);
 
@@ -69,12 +68,6 @@ public class WatermarkHudModule extends HudModule {
 
         if (shadow.getValue()) {
             RenderUtil.rect(ctx, x + 2, y + 2, x + w + 2, y + h + 2, 0x33000000);
-        }
-
-        if (background.getValue()) {
-            RenderUtil.rect(ctx, x, y, x + w, y + h, 0xFF0A0E27);
-            RenderUtil.rect(ctx, x, y, x + w, y + 1, 0xFF00FF66);
-            RenderUtil.rect(ctx, x, y, x + 1, y + h, 0xFF00FF66);
         }
 
         ctx.pose().pushMatrix();

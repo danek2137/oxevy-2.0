@@ -135,4 +135,9 @@ object ShaderManager {
     }
 
     fun colorUniform(color: Int): FloatArray = argbToRgba(color)
+
+    fun setColorUniform(program: Int, name: String, color: Int) {
+        val rgba = argbToRgba(color)
+        uniform4f(program, name, rgba[0], rgba[1], rgba[2], rgba[3])
+    }
 }

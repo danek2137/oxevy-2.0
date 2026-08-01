@@ -37,7 +37,7 @@ public class EntityOwnerModule extends Module {
     @Override
     public void onRender3D(Render3DEvent event) {
         if (nullCheck()) return;
-        NametagUtils.onRender(event.getMatrix(), event.getProjectionMatrix());
+        NametagUtils.onRender(event.getProjectionMatrix(), event.getPositionMatrix());
     }
 
     @Override

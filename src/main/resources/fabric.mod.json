@@ -5,12 +5,12 @@
   "name": "Oxevy",
   "description": "Free and open-source Minecraft client",
   "authors": [
-    "3arthqu4ke",
-    "alpha432",
-    "cattyn"
+    "like_bakmc",
+    "kubix_2468-tester"
   ],
   "contact": {
-    "repo": "https://github.com/mioclient/oxevy"
+    "repo": "https://oxevy.daneq.workers.dev/",
+    "page": "https://oxevy.daneq.workers.dev/"
   },
   "license": "MIT",
   "icon": "assets/oxevy/textures/watermark.png",

@@ -20,7 +20,8 @@ public abstract class MixinTitleScreen extends net.minecraft.client.gui.screens.
 
     @Inject(method = "init", at = @At("HEAD"), cancellable = true)
     private void onInit(CallbackInfo ci) {
-        Minecraft.getInstance().setScreen(new me.alpha432.oxevy.features.gui.LiquidMainMenu());
+        if (Oxevy.destroyed) return;
+        Minecraft.getInstance().setScreen(new me.alpha432.oxevy.features.gui.OxevyMainMenu());
         ci.cancel();
     }
 }

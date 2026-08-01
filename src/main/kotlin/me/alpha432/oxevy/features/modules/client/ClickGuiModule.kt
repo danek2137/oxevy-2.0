@@ -4,7 +4,7 @@ import me.alpha432.oxevy.Oxevy
 import me.alpha432.oxevy.event.impl.ClientEvent
 import me.alpha432.oxevy.event.system.Subscribe
 import me.alpha432.oxevy.features.commands.Command
-import me.alpha432.oxevy.features.gui.OxevyGui
+import me.alpha432.oxevy.features.gui.ClickGuiScreen
 import me.alpha432.oxevy.features.modules.Module
 import me.alpha432.oxevy.features.settings.Bind
 import me.alpha432.oxevy.features.settings.Setting
@@ -75,7 +75,7 @@ class ClickGuiModule : Module("ClickGui", "Opens the ClickGui", Module.Category.
 
     override fun onEnable() {
         if (nullCheck()) return
-        Util.mc.setScreen(OxevyGui.getClickGui())
+        Util.mc.setScreen(ClickGuiScreen.getInstance())
         disable()
     }
 
