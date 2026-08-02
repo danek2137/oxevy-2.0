@@ -30,16 +30,6 @@ nothing for now
 ### New One
 ![OxeVy UI2](images/ui2.png)
 
-## Technologies Used
-
-| AI Tool | Purpose |
-|---------|---------|
-| ChatGPT | Code optimization and feature implementation |
-| DeepSeek | Prompt engineering |
-| OpenCode | Open-source best practices |
-| Gemini | UI/UX improvements |
-| Cursor | Development assistance |
-
 ## Requirements
 
 - Java 21
