@@ -156,6 +156,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new TrailModule());
         register(new EntityOwnerModule());
         register(new ItemPhysicsModule());
+        register(new CosmeticsModule());
 
         // Set default enabled modules
         FpsHudModule fps = (FpsHudModule) getModuleByClass(FpsHudModule.class);
@@ -191,6 +192,11 @@ public class ModuleManager implements Jsonable, Util {
         WatermarkHudModule watermarkHud = (WatermarkHudModule) getModuleByClass(WatermarkHudModule.class);
         if (watermarkHud != null) {
             watermarkHud.enable();
+        }
+
+        CosmeticsModule cosmetics = (CosmeticsModule) getModuleByClass(CosmeticsModule.class);
+        if (cosmetics != null) {
+            cosmetics.enable();
         }
 
         MenuWatermark menuWatermark = (MenuWatermark) getModuleByClass(MenuWatermark.class);

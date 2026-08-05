@@ -4,12 +4,11 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.authlib.minecraft.MinecraftProfileTexture;
 import me.alpha432.oxevy.Oxevy;
+import me.alpha432.oxevy.manager.SelfCosmeticsManager;
 import me.alpha432.oxevy.network.OxevyUserManager;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.resources.SkinManager;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.PlayerSkin;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -21,7 +20,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,15 +29,6 @@ public abstract class MixinSkinManager {
 
     @Unique
     private static final Map<String, String> capeUrls = new ConcurrentHashMap<>();
-
-    @Unique
-    private static final Set<String> capeFetching = ConcurrentHashMap.newKeySet();
-
-    @Unique
-    private static final Map<String, String> skinUrls = new ConcurrentHashMap<>();
-
-    @Unique
-    private static final Set<String> skinFetching = ConcurrentHashMap.newKeySet();
 
     @Unique
     private static boolean capesLoaded = false;
@@ -68,28 +57,35 @@ public abstract class MixinSkinManager {
             loadCapes();
         }
 
+        SelfCosmeticsManager.captureTextures(uuid, textures);
+
+        boolean isSelf = uuid.equals(Minecraft.getInstance().getGameProfile().id());
+        if (isSelf) {
+            SelfCosmeticsManager.ensurePrefetched();
+        }
+
         String uuidStr = uuid.toString();
-        String capeUrl = capeUrls.get(uuidStr);
+        boolean remoteEnabled = SelfCosmeticsManager.isCosmeticsEnabled();
+        String remoteCape = remoteEnabled ? SelfCosmeticsManager.getCapeUrl(uuid) : null;
+        String launcherCape = capeUrls.get(uuidStr);
+        String capeUrl = remoteCape != null ? remoteCape : launcherCape;
         if (capeUrl != null) {
             currentCape = new MinecraftProfileTexture(capeUrl, null);
         } else if (OxevyUserManager.isOxevyUser(uuid)) {
-            fetchRemoteCape(uuid);
+            currentCape = new MinecraftProfileTexture(DEFAULT_CAPE_URL, null);
+        } else if (isSelf) {
             currentCape = new MinecraftProfileTexture(DEFAULT_CAPE_URL, null);
         } else {
             currentCape = null;
         }
 
-        if (uuid.equals(Minecraft.getInstance().getGameProfile().id()) && customSkinUrl != null) {
+        String remoteSkin = remoteEnabled ? SelfCosmeticsManager.getSkinUrl(uuid) : null;
+        if (remoteSkin != null) {
+            currentSkin = new MinecraftProfileTexture(remoteSkin, null);
+        } else if (isSelf && customSkinUrl != null) {
             currentSkin = new MinecraftProfileTexture(customSkinUrl, null);
         } else {
             currentSkin = null;
-        }
-
-        String skinUrl = skinUrls.get(uuidStr);
-        if (skinUrl != null) {
-            currentSkin = new MinecraftProfileTexture(skinUrl, null);
-        } else if (uuid.equals(Minecraft.getInstance().getGameProfile().id()) || OxevyUserManager.isOxevyUser(uuid)) {
-            fetchRemoteSkin(uuid);
         }
     }
 
@@ -120,8 +116,6 @@ public abstract class MixinSkinManager {
     @Unique
     private static void loadCapes() {
         capesLoaded = true;
-        capeUrls.clear();
-        customSkinUrl = null;
 
         try {
             loadCustomSkin();
@@ -130,7 +124,7 @@ public abstract class MixinSkinManager {
             UUID uuid = Minecraft.getInstance().getGameProfile().id();
             String capeUrl = Oxevy.capeManager.getActiveCapeUrl();
             if (capeUrl != null && !capeUrl.isEmpty()) {
-                capeUrls.put(uuid.toString(), capeUrl);
+                capeUrls.putIfAbsent(uuid.toString(), capeUrl);
             }
         } catch (Exception e) {
             Oxevy.LOGGER.error("Failed to load capes", e);
@@ -151,60 +145,5 @@ public abstract class MixinSkinManager {
         } catch (Exception e) {
             Oxevy.LOGGER.error("Failed to load custom skin", e);
         }
-    }
-
-    @Unique
-    private static String resolveName(UUID uuid) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null && uuid.equals(mc.player.getGameProfile().id())) {
-            return mc.player.getGameProfile().name();
-        }
-        if (mc.level != null) {
-            Player player = mc.level.getPlayerByUUID(uuid);
-            if (player != null) {
-                return player.getGameProfile().name();
-            }
-        }
-        if (mc.getConnection() != null) {
-            PlayerInfo info = mc.getConnection().getPlayerInfo(uuid);
-            if (info != null) {
-                return info.getProfile().name();
-            }
-        }
-        return null;
-    }
-
-    @Unique
-    private static void fetchRemoteCape(UUID uuid) {
-        String uuidStr = uuid.toString();
-        if (capeFetching.contains(uuidStr)) return;
-
-        String name = resolveName(uuid);
-        if (name == null || name.isEmpty()) return;
-
-        capeFetching.add(uuidStr);
-        Oxevy.modDataManager.fetchCape(name, capeUrl -> {
-            capeFetching.remove(uuidStr);
-            if (capeUrl != null && !capeUrl.isEmpty()) {
-                capeUrls.put(uuidStr, capeUrl);
-            }
-        });
-    }
-
-    @Unique
-    private static void fetchRemoteSkin(UUID uuid) {
-        String uuidStr = uuid.toString();
-        if (skinFetching.contains(uuidStr)) return;
-
-        String name = resolveName(uuid);
-        if (name == null || name.isEmpty()) return;
-
-        skinFetching.add(uuidStr);
-        Oxevy.modDataManager.fetchSkin(name, skinUrl -> {
-            skinFetching.remove(uuidStr);
-            if (skinUrl != null && !skinUrl.isEmpty()) {
-                skinUrls.put(uuidStr, skinUrl);
-            }
-        });
     }
 }

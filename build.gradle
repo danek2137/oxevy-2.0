@@ -1,4 +1,61 @@
 import java.nio.file.Paths
+import org.gradle.process.ExecOperations
+
+import javax.inject.Inject
+
+abstract class CompileNativeRpcTask extends DefaultTask {
+    @Inject
+    abstract ExecOperations getExecOperations()
+
+    @TaskAction
+    void compile() {
+        def nativeDir = project.file("src/main/native/rpc")
+        def nativeOutDir = project.file("build/native")
+        def javaHome = System.getenv("JAVA_HOME") ?: project.providers.exec {
+            commandLine "bash", "-c", 'dirname $(dirname $(readlink -f $(which java)))'
+        }.standardOutput.asText.get().trim()
+        nativeOutDir.mkdirs()
+
+        def os = org.gradle.internal.os.OperatingSystem.current()
+        def jdkInc = "-I${javaHome}/include"
+
+        if (os.isWindows()) {
+            execOperations.exec {
+                commandLine "g++", "-shared", "-O2", "-std=c++17",
+                        jdkInc,
+                        "-I${javaHome}/include/win32",
+                        "-I${nativeDir}/win32",
+                        "-static-libgcc", "-static-libstdc++", "-Wl,--kill-at",
+                        "${nativeDir}/discord_rpc_windows.cpp",
+                        "-o", "${nativeOutDir}/oxevy-rpc.dll"
+            }
+        } else {
+            execOperations.exec {
+                commandLine "g++", "-shared", "-fPIC", "-O2", "-std=c++17",
+                        jdkInc,
+                        "-I${javaHome}/include/linux",
+                        "${nativeDir}/discord_rpc_linux.cpp",
+                        "-o", "${nativeOutDir}/liboxevy-rpc.so"
+            }
+            // Cross-compile the Windows .dll too when mingw is available.
+            def mingw = project.providers.exec {
+                commandLine "bash", "-c", "command -v x86_64-w64-mingw32-g++ || true"
+            }.standardOutput.asText.get().trim()
+            if (mingw) {
+                execOperations.exec {
+                    commandLine "x86_64-w64-mingw32-g++", "-shared", "-O2", "-std=c++17",
+                            jdkInc,
+                            "-I${nativeDir}/win32",
+                            "-static-libgcc", "-static-libstdc++", "-Wl,--kill-at",
+                            "${nativeDir}/discord_rpc_windows.cpp",
+                            "-o", "${nativeOutDir}/oxevy-rpc.dll"
+                }
+            } else {
+                logger.lifecycle("mingw not found; skipping Windows oxevy-rpc.dll")
+            }
+        }
+    }
+}
 
 plugins {
     id 'fabric-loom' version "$loom_version"
@@ -73,7 +130,6 @@ repositories {
     mavenCentral()
     maven { url = uri("https://maven.wispforest.io/releases/") }
     maven { url = uri("https://jitpack.io") }
-    maven { url = uri("https://maven.firstdark.dev/releases") }
 }
 
 loom {
@@ -84,7 +140,6 @@ dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    implementation 'dev.firstdark.discordrpc:discord-rpc:1.0.4'
     // Fabric API
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
@@ -151,6 +206,42 @@ sourcesJar {
 jar {
     from("LICENSE") {
         rename { "${it}_${archives_base_name}" }
+    }
+}
+
+def nativeOutDir = file("build/native")
+def nativeResourceDir = file("build/native-resources/oxevy/native")
+
+tasks.register("compileNativeRpc", CompileNativeRpcTask)
+
+tasks.register("stageNativeRpc", Sync) {
+    dependsOn("compileNativeRpc")
+    def os = org.gradle.internal.os.OperatingSystem.current()
+    def hostPlatform = os.isWindows() ? "windows" : (os.isMacOsX() ? "macos" : "linux")
+    def arch = System.getProperty("os.arch")
+    def hostArchDir = arch == "aarch64" || arch == "arm64" ? "aarch64" :
+            (arch == "x86_64" || arch == "amd64" ? "x86_64" : arch)
+    // Host platform binary.
+    def hostLib = hostPlatform == "windows" ? "oxevy-rpc.dll" : "liboxevy-rpc.so"
+    from(file("${nativeOutDir}/${hostLib}")) {
+        into("${hostPlatform}-${hostArchDir}")
+    }
+    // Windows .dll cross-compiled from Linux hosts.
+    if (hostPlatform == "linux") {
+        from(file("${nativeOutDir}/oxevy-rpc.dll")) {
+            into("windows-x86_64")
+        }
+    }
+    into(nativeResourceDir)
+}
+
+tasks.named("processResources") {
+    dependsOn("stageNativeRpc")
+}
+
+jar {
+    from(nativeResourceDir) {
+        into("oxevy/native")
     }
 }
 

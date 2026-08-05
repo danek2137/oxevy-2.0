@@ -1,92 +1,74 @@
 package com.oxevy.safemod.discord;
 
-import dev.firstdark.rpc.DiscordRpc;
-import dev.firstdark.rpc.enums.ActivityType;
-import dev.firstdark.rpc.enums.ErrorCode;
-import dev.firstdark.rpc.handlers.RPCEventHandler;
-import dev.firstdark.rpc.models.DiscordRichPresence;
-import dev.firstdark.rpc.models.User;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.slf4j.helpers.NOPLogger;
 
 public class DiscordRpcManager {
     private static final Logger LOG = LogManager.getLogger();
     private static final String DEFAULT_CLIENT_ID = "1531698504605630554";
-    private static DiscordRpc rpc;
     private static boolean enabled = false;
+    private static long startTimestampSec = 0L;
+
+    private DiscordRpcManager() {
+    }
 
     public static void init(String clientId) {
-        if (enabled && rpc != null) return;
+        if (enabled) return;
 
         if (clientId == null || clientId.isEmpty()) {
             clientId = DEFAULT_CLIENT_ID;
         }
 
-        rpc = new DiscordRpc();
-        rpc.setDebugMode(false);
-        rpc.setLogger(NOPLogger.NOP_LOGGER);
-
-        RPCEventHandler handler = new RPCEventHandler() {
-            @Override
-            public void ready(User user) {
-                LOG.info("Discord RPC ready");
-            }
-
-            @Override
-            public void disconnected(ErrorCode errorCode, String message) {
-            }
-
-            @Override
-            public void errored(ErrorCode errorCode, String message) {
-            }
-        };
+        if (!NativeDiscordRpc.isLoaded()) {
+            LOG.warn("Discord RPC native library not loaded");
+            return;
+        }
 
         try {
-            rpc.init(clientId, handler, false);
-            enabled = true;
-        } catch (Exception e) {
-            LOG.debug("Discord RPC not available (Discord may not be running)");
-            rpc = null;
+            enabled = NativeDiscordRpc.initialize(clientId);
+            if (enabled) {
+                startTimestampSec = System.currentTimeMillis() / 1000L;
+                LOG.info("Discord RPC ready (native bridge)");
+            } else {
+                LOG.debug("Discord RPC not available (Discord may not be running)");
+            }
+        } catch (Throwable t) {
+            LOG.debug("Discord RPC init failed", t);
+            enabled = false;
         }
+    }
+
+    public static void setStartTimestamp(long timestampSec) {
+        startTimestampSec = timestampSec;
     }
 
     public static void updatePresence(String details, String state) {
-        if (!enabled || rpc == null) return;
-
-        DiscordRichPresence presence = DiscordRichPresence.builder()
-                .details(details)
-                .state(state)
-                .activityType(ActivityType.PLAYING)
-                .build();
-
-        rpc.updatePresence(presence);
+        updatePresence(details, state, null, null);
     }
 
     public static void updatePresence(String details, String state, String largeImageKey) {
-        if (!enabled || rpc == null) return;
+        updatePresence(details, state, largeImageKey, null);
+    }
 
-        var builder = DiscordRichPresence.builder()
-                .details(details)
-                .state(state)
-                .activityType(ActivityType.PLAYING);
-
-        if (largeImageKey != null && !largeImageKey.isEmpty()) {
-            builder.largeImageKey(largeImageKey);
+    public static void updatePresence(String details, String state, String largeImageKey, String smallImageKey) {
+        if (!enabled) return;
+        try {
+            NativeDiscordRpc.updatePresence(details, state, largeImageKey, smallImageKey,
+                    startTimestampSec, 0L);
+        } catch (Throwable t) {
+            LOG.debug("Discord RPC update failed", t);
         }
-
-        rpc.updatePresence(builder.build());
     }
 
     public static void shutdown() {
-        if (rpc != null) {
-            try {
-                rpc.shutdown();
-            } catch (Exception e) {
-            }
-            rpc = null;
+        if (!enabled) return;
+        try {
+            NativeDiscordRpc.shutdown();
+        } catch (Throwable t) {
+            LOG.debug("Discord RPC shutdown failed", t);
         }
         enabled = false;
+        startTimestampSec = 0L;
     }
 
     public static boolean isEnabled() {

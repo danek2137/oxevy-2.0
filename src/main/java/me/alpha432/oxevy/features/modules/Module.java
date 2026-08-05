@@ -70,6 +70,7 @@ public class Module extends Feature implements Jsonable, Toggleable {
     public void enable() {
         if (Oxevy.tempDisabled && !Oxevy.tempDisabledModules.contains(getName())) return;
         if (Oxevy.destroyed) return;
+        if (Oxevy.banned) return;
         this.enabled.setValue(true);
         EVENT_BUS.register(this);
         EVENT_BUS.post(new ClientEvent(ClientEvent.Type.TOGGLE_MODULE, this));

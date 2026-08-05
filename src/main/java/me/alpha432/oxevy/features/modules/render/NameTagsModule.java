@@ -9,6 +9,8 @@ import me.alpha432.oxevy.util.player.PlayerBadges;
 import me.alpha432.oxevy.util.render.NametagUtils;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -41,6 +43,8 @@ public class NameTagsModule extends Module {
     private static final int ACCENT_COLOR = 0xFF00FF66;
     private static final int TEXT_COLOR = 0xFFFFFFFF;
     private static final int ARMOR_BG_COLOR = 0x80000000;
+
+    private static final Identifier OXEVY_ICON = Identifier.fromNamespaceAndPath("oxevy", "textures/oxevy-icon.png");
 
     private final List<Entity> targets = new ArrayList<>();
     private final Vector3d pos = new Vector3d();
@@ -125,15 +129,23 @@ public class NameTagsModule extends Module {
         String line = buildLine(player);
         int width = mc.font.width(line);
         int lineHeight = mc.font.lineHeight;
+        boolean icon = hasWatermark(player);
 
-        int boxX = -width / 2 - 4;
+        int iconSize = icon ? lineHeight : 0;
+        int gap = icon ? 2 : 0;
+        int boxW = width + iconSize + gap + 8;
+        int boxX = -boxW / 2;
         int boxY = -lineHeight - 2;
-        int boxW = width + 8;
         int boxH = lineHeight + 4;
 
         ctx.fill(boxX, boxY, boxX + boxW, boxY + boxH, BACKGROUND_COLOR);
         ctx.fill(boxX, boxY, boxX + boxW, boxY + 1, ACCENT_COLOR);
-        ctx.drawString(mc.font, line, -width / 2, -lineHeight, TEXT_COLOR, shadow.getValue());
+
+        if (icon) {
+            ctx.blit(RenderPipelines.GUI_TEXTURED, OXEVY_ICON, boxX + 4, boxY + 2, 0f, 0f, iconSize, iconSize, iconSize, iconSize);
+        }
+
+        ctx.drawString(mc.font, line, boxX + 4 + iconSize + gap, -lineHeight, TEXT_COLOR, shadow.getValue());
 
         if (armor.getValue()) {
             drawItems(ctx, player);
@@ -160,16 +172,16 @@ public class NameTagsModule extends Module {
             }
         }
 
-        if (watermark.getValue() && (player.getUUID().equals(mc.player.getUUID()) || Oxevy.oxevyUsersManager.isKnown(player))) {
-            prefix.append("O ");
-        }
-
         String badge = PlayerBadges.getBadge(player);
         if (!badge.isEmpty()) {
             prefix.append(badge).append(" ");
         }
 
         return prefix.toString();
+    }
+
+    private boolean hasWatermark(Player player) {
+        return watermark.getValue() && (player.getUUID().equals(mc.player.getUUID()) || Oxevy.oxevyUsersManager.isKnown(player));
     }
 
     private String buildSuffix(Player player) {
