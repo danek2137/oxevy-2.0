@@ -2,6 +2,7 @@ package me.alpha432.oxevy.features.gui;
 
 import me.alpha432.oxevy.features.modules.client.ClickGuiModule;
 import me.alpha432.oxevy.features.settings.Setting;
+import me.alpha432.oxevy.util.render.CustomFont;
 import me.alpha432.oxevy.util.render.RenderUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -23,7 +24,7 @@ public class ButtonComponent extends SettingComponent {
         
         // Label
         String label = setting.getName();
-        context.drawString(mc.font, label, x + (width - mc.font.width(label)) / 2, y + (height - 8) / 2, 0xFFFFFFFF);
+        context.drawString(CustomFont.font(), label, x + (width - CustomFont.font().width(label)) / 2, y + (height - 8) / 2, 0xFFFFFFFF);
     }
     
     @Override

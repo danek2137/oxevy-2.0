@@ -2,6 +2,7 @@ package me.alpha432.oxevy.features.gui;
 
 import me.alpha432.oxevy.features.modules.client.ClickGuiModule;
 import me.alpha432.oxevy.features.settings.Setting;
+import me.alpha432.oxevy.util.render.CustomFont;
 import me.alpha432.oxevy.util.render.RenderUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -29,9 +30,9 @@ public class ColorComponent extends SettingComponent {
         Color accent = ClickGuiModule.getInstance().color.getValue();
         RenderUtil.roundRect(context, x, y, width, height, 10f, isHovered(mouseX, mouseY) ? 0x1AFFFFFF : 0x12FFFFFF);
         int textY = y + (height - 8) / 2;
-        context.drawString(mc.font, setting.getName(), x + 10, textY, 0xFFE6E6E6);
+        context.drawString(CustomFont.font(), setting.getName(), x + 10, textY, 0xFFE6E6E6);
         String preview = String.format("#%02X%02X%02X", c.getRed(), c.getGreen(), c.getBlue());
-        context.drawString(mc.font, preview, x + width - 58 - mc.font.width(preview), textY, new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 235).getRGB());
+        context.drawString(CustomFont.font(), preview, x + width - 58 - CustomFont.font().width(preview), textY, new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 235).getRGB());
         RenderUtil.roundRect(context, x + width - 34, y + 4, 24, height - 8, 6f, c.getRGB());
 
         if (open) {
@@ -49,9 +50,9 @@ public class ColorComponent extends SettingComponent {
     }
 
     private void drawChannelRow(GuiGraphics context, String label, Color color, int value, int rowX, int rowY, int rowWidth) {
-        context.drawString(mc.font, label, rowX, rowY, 0xFFBDBDC7);
+        context.drawString(CustomFont.font(), label, rowX, rowY, 0xFFBDBDC7);
         String valueText = String.valueOf(value);
-        context.drawString(mc.font, valueText, rowX + rowWidth - mc.font.width(valueText), rowY, 0xFFD4D4D8);
+        context.drawString(CustomFont.font(), valueText, rowX + rowWidth - CustomFont.font().width(valueText), rowY, 0xFFD4D4D8);
 
         int trackY = rowY + 12;
         int trackWidth = rowWidth;

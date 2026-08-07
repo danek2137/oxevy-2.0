@@ -1,6 +1,7 @@
 package me.alpha432.oxevy.features.gui;
 
 import me.alpha432.oxevy.features.settings.Setting;
+import me.alpha432.oxevy.util.render.CustomFont;
 import me.alpha432.oxevy.util.render.RenderUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -20,7 +21,7 @@ public class StringComponent extends SettingComponent {
         // Background
         RenderUtil.rect(context, x, y, x + width, y + height, 0x11FFFFFF);
         
-        context.drawString(mc.font, setting.getName(), x + 5, y + 2, 0xFFBBBBBB);
+        context.drawString(CustomFont.font(), setting.getName(), x + 5, y + 2, 0xFFBBBBBB);
         
         // Input box background
         int boxY = y + height - 12;
@@ -31,7 +32,7 @@ public class StringComponent extends SettingComponent {
         String displayText = value + (focused ? (System.currentTimeMillis() % 1000 > 500 ? "_" : "") : "");
         if (value.isEmpty() && !focused) displayText = "Type...";
         
-        context.drawString(mc.font, displayText, x + 10, boxY + 1, focused ? 0xFFFFFFFF : 0xFF888888);
+        context.drawString(CustomFont.font(), displayText, x + 10, boxY + 1, focused ? 0xFFFFFFFF : 0xFF888888);
         
         if (hovered) {
             RenderUtil.rect(context, x, y, x + width, y + height, 0x11FFFFFF);

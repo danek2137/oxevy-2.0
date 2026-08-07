@@ -2,6 +2,7 @@ package me.alpha432.oxevy.features.gui;
 
 import me.alpha432.oxevy.features.modules.client.ClickGuiModule;
 import me.alpha432.oxevy.features.settings.Setting;
+import me.alpha432.oxevy.util.render.CustomFont;
 import me.alpha432.oxevy.util.render.RenderUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -18,10 +19,10 @@ public class EnumComponent extends SettingComponent {
         Color accent = ClickGuiModule.getInstance().color.getValue();
         RenderUtil.roundRect(context, x, y, width, height, 8f, isHovered(mouseX, mouseY) ? 0x1AFFFFFF : 0x12FFFFFF);
         int textY = y + (height - 8) / 2;
-        context.drawString(mc.font, setting.getName(), x + 10, textY, 0xFFE6E6E6);
+        context.drawString(CustomFont.font(), setting.getName(), x + 10, textY, 0xFFE6E6E6);
         String val = setting.currentEnumName();
-        context.drawString(mc.font, val, x + width - 20 - mc.font.width(val), textY, new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 230).getRGB());
-        context.drawString(mc.font, ">", x + width - 12, textY, 0xFF9E9EAA);
+        context.drawString(CustomFont.font(), val, x + width - 20 - CustomFont.font().width(val), textY, new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 230).getRGB());
+        context.drawString(CustomFont.font(), ">", x + width - 12, textY, 0xFF9E9EAA);
     }
     @Override
     public boolean mouseClicked(double mx, double my, int b) {

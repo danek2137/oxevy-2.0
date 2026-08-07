@@ -6,6 +6,7 @@ import me.alpha432.oxevy.features.modules.client.ClickGuiModule;
 import me.alpha432.oxevy.features.settings.Bind;
 import me.alpha432.oxevy.features.settings.Setting;
 import me.alpha432.oxevy.util.render.AnimationUtil;
+import me.alpha432.oxevy.util.render.CustomFont;
 import me.alpha432.oxevy.util.render.RenderUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -99,7 +100,7 @@ public class OxevySettingsScreen extends Screen {
         RenderUtil.rect(context, cfgBtnX, cfgBtnY, cfgBtnX + ICON_BTN_SIZE, cfgBtnY + ICON_BTN_SIZE, cfgBtnBg);
         RenderUtil.rect(context, cfgBtnX, cfgBtnY, cfgBtnX + ICON_BTN_SIZE, cfgBtnY + ICON_BTN_SIZE, 0x33FFFFFF, 1.0f);
         int cfgIconColor = cfgBtnHover ? 0xFFFFFFFF : 0xFFBBBBBB;
-        context.drawString(mc.font, CONFIG_ICON, cfgBtnX + 4, cfgBtnY + 3, cfgIconColor);
+        context.drawString(CustomFont.font(), CONFIG_ICON, cfgBtnX + 4, cfgBtnY + 3, cfgIconColor);
 
         // HUD editor quick button (top-right)
         int btnX = x + WIDTH - ICON_BTN_PAD - ICON_BTN_SIZE;
@@ -109,7 +110,7 @@ public class OxevySettingsScreen extends Screen {
         RenderUtil.rect(context, btnX, btnY, btnX + ICON_BTN_SIZE, btnY + ICON_BTN_SIZE, btnBg);
         RenderUtil.rect(context, btnX, btnY, btnX + ICON_BTN_SIZE, btnY + ICON_BTN_SIZE, 0x33FFFFFF, 1.0f);
         int iconColor = btnHover ? 0xFFFFFFFF : 0xFFBBBBBB;
-        context.drawString(mc.font, HUD_EDITOR_ICON, btnX + 4, btnY + 3, iconColor);
+        context.drawString(CustomFont.font(), HUD_EDITOR_ICON, btnX + 4, btnY + 3, iconColor);
 
         // Sidebar (Categories)
         RenderUtil.rect(context, x, y + 2, x + SIDEBAR_WIDTH, y + HEIGHT, 0xFF181818);
@@ -124,8 +125,8 @@ public class OxevySettingsScreen extends Screen {
             }
 
             String icon = getCategoryIcon(cat);
-            context.drawString(mc.font, icon, x + 8, categoryY, textColor);
-            context.drawString(mc.font, cat.getName(), x + 25, categoryY, textColor);
+            context.drawString(CustomFont.font(), icon, x + 8, categoryY, textColor);
+            context.drawString(CustomFont.font(), cat.getName(), x + 25, categoryY, textColor);
             categoryY += 20;
         }
 
@@ -154,7 +155,7 @@ public class OxevySettingsScreen extends Screen {
                     RenderUtil.rect(context, moduleX + 5, moduleY - 2, moduleX + 7, moduleY + 12, c);
                 }
 
-                context.drawString(mc.font, mod.getDisplayName(), moduleX + 10, moduleY, textColor);
+                context.drawString(CustomFont.font(), mod.getDisplayName(), moduleX + 10, moduleY, textColor);
                 moduleY += 18;
             }
             maxModuleScroll = Math.max(0, moduleY - (y + HEIGHT) + 20);
@@ -164,7 +165,7 @@ public class OxevySettingsScreen extends Screen {
         int settingsX = moduleX + MODULE_WIDTH;
         int settingsAreaHeight = HEIGHT - 30;
         if (selectedModule != null) {
-            context.drawString(mc.font, selectedModule.getDisplayName() + " Settings", settingsX + 15, y + 15, 0xFFAAAAAA);
+            context.drawString(CustomFont.font(), selectedModule.getDisplayName() + " Settings", settingsX + 15, y + 15, 0xFFAAAAAA);
 
             int settingY = y + 32 - settingsScrollOffset;
             maxSettingsScroll = 0;
@@ -181,8 +182,8 @@ public class OxevySettingsScreen extends Screen {
             maxSettingsScroll = Math.max(0, settingY - (y + settingsAreaHeight) - 35);
         } else {
             String text = "Select a module to view settings";
-            context.drawString(mc.font, text,
-                settingsX + (WIDTH - SIDEBAR_WIDTH - MODULE_WIDTH - mc.font.width(text)) / 2,
+            context.drawString(CustomFont.font(), text,
+                settingsX + (WIDTH - SIDEBAR_WIDTH - MODULE_WIDTH - CustomFont.font().width(text)) / 2,
                 y + HEIGHT / 2,
                 0xFF444444
             );

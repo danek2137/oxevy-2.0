@@ -3,9 +3,11 @@ package me.alpha432.oxevy.features.gui;
 import me.alpha432.oxevy.Oxevy;
 import me.alpha432.oxevy.features.modules.Module;
 import me.alpha432.oxevy.features.modules.Module.Category;
+import me.alpha432.oxevy.features.modules.client.ClickGuiModule;
 import me.alpha432.oxevy.features.settings.Bind;
 import me.alpha432.oxevy.features.settings.Setting;
 import me.alpha432.oxevy.util.KeyboardUtil;
+import me.alpha432.oxevy.util.render.CustomFont;
 import me.alpha432.oxevy.util.render.RenderUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -24,6 +26,11 @@ import java.util.Map;
 public class ClickGuiScreen extends Screen {
 
     private static ClickGuiScreen INSTANCE;
+
+    // ── Animation state ────────────────────────────────────────────
+    private float anim = 1f;          // 0 = fully closed, 1 = fully open
+    private boolean closing = false;  // true while the close animation plays
+    private long animStartNs = 0;     // when the current anim phase started
 
     // ── State ──────────────────────────────────────────────────────
     private Category selCategory = Category.COMBAT;
@@ -74,6 +81,9 @@ public class ClickGuiScreen extends Screen {
         if (INSTANCE == null || INSTANCE.mc == null) {
             INSTANCE = new ClickGuiScreen();
         }
+        INSTANCE.closing = false;
+        INSTANCE.anim = 0f;
+        INSTANCE.animStartNs = System.nanoTime();
         return INSTANCE;
     }
 
@@ -83,11 +93,48 @@ public class ClickGuiScreen extends Screen {
 
     @Override
     public void render(GuiGraphics ctx, int mx, int my, float delta) {
-        int guiX = (ctx.guiWidth() - GUI_W) / 2;
-        int guiY = (ctx.guiHeight() - GUI_H) / 2;
+        updateAnimation();
 
-        // backdrop
-        ctx.fill(0, 0, ctx.guiWidth(), ctx.guiHeight(), 0xE6050510);
+        // The close animation finished — actually leave the screen.
+        if (closing && anim <= 0f) {
+            closing = false;
+            anim = 0f;
+            super.onClose();
+            return;
+        }
+
+        int guiW = ctx.guiWidth();
+        int guiH = ctx.guiHeight();
+        int guiX = (guiW - GUI_W) / 2;
+        int guiY = (guiH - GUI_H) / 2;
+
+        // backdrop (fades with the animation)
+        int alpha = (int) (0xE6 * anim);
+        ctx.fill(0, 0, guiW, guiH, (alpha << 24) | 0x050510);
+
+        ClickGuiModule cgm = ClickGuiModule.getInstance();
+        boolean scaleAnim = cgm.scaleAnimation.getValue();
+        boolean slideAnim = cgm.slideInAnimation.getValue();
+        boolean animOn = cgm.animationsEnabled.getValue();
+
+        var pose = ctx.pose();
+        pose.pushMatrix();
+
+        float eased = easeOutCubic(anim);
+        if (animOn) {
+            if (scaleAnim) {
+                float scale = 0.9f + 0.1f * eased;
+                pose.translate(guiX + GUI_W / 2f, guiY + GUI_H / 2f);
+                pose.scale(scale, scale);
+                pose.translate(-(guiX + GUI_W / 2f), -(guiY + GUI_H / 2f));
+            }
+            if (slideAnim) {
+                // Slide in from the top of the screen; the close animation
+                // reverses automatically (anim goes 1 -> 0) and slides back up.
+                float slide = -(1f - eased) * (guiY + GUI_H);
+                pose.translate(0f, slide);
+            }
+        }
 
         // main bg
         RenderUtil.rect(ctx, guiX, guiY, guiX + GUI_W, guiY + GUI_H, C_BG);
@@ -97,7 +144,45 @@ public class ClickGuiScreen extends Screen {
         drawSettingsPanel(ctx, guiX + LEFT_W, guiY + TAB_H, mx, my);
         drawFooter(ctx, guiX, guiY + GUI_H, mx, my);
 
+        pose.popMatrix();
+
         super.render(ctx, mx, my, delta);
+    }
+
+    // ── Animation helpers ─────────────────────────────────────────
+    private void updateAnimation() {
+        ClickGuiModule cgm = ClickGuiModule.getInstance();
+        if (!cgm.animationsEnabled.getValue()) {
+            anim = closing ? 0f : 1f;
+            return;
+        }
+
+        // Deterministic time-based animation: advances linearly toward the
+        // target and completes in exactly `animDuration()` seconds. Exponential
+        // decay was buggy — it never truly reaches the threshold, so the GUI
+        // lingered almost-invisible for seconds after closing.
+        float duration = animDuration();
+        float elapsed = (System.nanoTime() - animStartNs) / 1e9f;
+        float t = Math.min(elapsed / duration, 1f);
+
+        if (closing) {
+            anim = 1f - t;
+        } else {
+            anim = t;
+        }
+    }
+
+    private float animDuration() {
+        ClickGuiModule cgm = ClickGuiModule.getInstance();
+        // animationSpeed (default 0.15) was a per-frame lerp factor; convert it
+        // to a duration that stays snappy. Clamped so it can never drag on.
+        float speed = Math.max(cgm.animationSpeed.getValue(), 0.01f);
+        return Math.max(0.06f, Math.min(0.9f, 0.09f / speed));
+    }
+
+    private static float easeOutCubic(float t) {
+        float p = 1f - t;
+        return 1f - p * p * p;
     }
 
     // ── Tabs ───────────────────────────────────────────────────────
@@ -106,7 +191,7 @@ public class ClickGuiScreen extends Screen {
 
         int tx = gx + 8;
         for (Category cat : Category.values()) {
-            int tw = mc.font.width(cat.getName()) + 16;
+            int tw = CustomFont.font().width(cat.getName()) + 16;
             boolean hover = mx >= tx && mx < tx + tw && my >= gy && my < gy + TAB_H;
             boolean active = cat == selCategory;
 
@@ -117,7 +202,7 @@ public class ClickGuiScreen extends Screen {
             }
 
             int textColor = active ? C_ACCENT : (hover ? C_TXT1 : C_TXT2);
-            ctx.drawString(mc.font, cat.getName(), tx + 8, gy + (TAB_H - 8) / 2, textColor);
+            ctx.drawString(CustomFont.font(), cat.getName(), tx + 8, gy + (TAB_H - 8) / 2, textColor);
             tx += tw + 4;
         }
 
@@ -127,10 +212,10 @@ public class ClickGuiScreen extends Screen {
         RenderUtil.rect(ctx, sx, gy + 6, sx + sw, gy + TAB_H - 6, C_INPUT);
         String prompt = searchText.isEmpty() && !searchFocused ? "Search..." : searchText;
         int promptColor = searchText.isEmpty() && !searchFocused ? C_TXT3 : C_TXT1;
-        ctx.drawString(mc.font, prompt, sx + 6, gy + (TAB_H - 8) / 2, promptColor);
+        ctx.drawString(CustomFont.font(), prompt, sx + 6, gy + (TAB_H - 8) / 2, promptColor);
 
         if (searchFocused) {
-            int cursorW = mc.font.width(searchText);
+            int cursorW = CustomFont.font().width(searchText);
             long blink = System.currentTimeMillis() / 500;
             if (blink % 2 == 0) {
                 ctx.fill(sx + 6 + cursorW + 1, gy + 10, sx + 7 + cursorW + 1, gy + 10 + 10, C_ACCENT);
@@ -176,16 +261,16 @@ public class ClickGuiScreen extends Screen {
 
             // name
             int nameColor = mod.isEnabled() ? C_TXT1 : C_TXT2;
-            ctx.drawString(mc.font, mod.getDisplayName(), listLeft + 14, yOff + (CARD_H - 8) / 2, nameColor);
+            ctx.drawString(CustomFont.font(), mod.getDisplayName(), listLeft + 14, yOff + (CARD_H - 8) / 2, nameColor);
 
             // bind badge
             Bind bind = mod.getBind();
             if (!bind.isEmpty()) {
                 String bindStr = KeyboardUtil.getKeyName(bind.getKey());
-                int bw = mc.font.width(bindStr) + 8;
+                int bw = CustomFont.font().width(bindStr) + 8;
                 int bx = listLeft + 4 + cardW - bw - 34;
                 RenderUtil.rect(ctx, bx, yOff + 9, bx + bw, yOff + CARD_H - 9, C_BG);
-                ctx.drawString(mc.font, bindStr, bx + 4, yOff + (CARD_H - 8) / 2, C_ACCENT2);
+                ctx.drawString(CustomFont.font(), bindStr, bx + 4, yOff + (CARD_H - 8) / 2, C_ACCENT2);
             }
 
             // toggle pill
@@ -212,20 +297,20 @@ public class ClickGuiScreen extends Screen {
 
         if (selModule == null) {
             String hint = "Right-click a module to edit settings";
-            ctx.drawString(mc.font, hint,
-                    px + (RIGHT_W - mc.font.width(hint)) / 2,
+            ctx.drawString(CustomFont.font(), hint,
+                    px + (RIGHT_W - CustomFont.font().width(hint)) / 2,
                     py + (GUI_H - TAB_H - 8) / 2,
                     C_TXT3);
             return;
         }
 
         // header
-        ctx.drawString(mc.font, selModule.getDisplayName(), px + 12, py + 10, C_TXT1);
+        ctx.drawString(CustomFont.font(), selModule.getDisplayName(), px + 12, py + 10, C_TXT1);
         RenderUtil.rect(ctx, px + 8, py + 24, pRight - 8, py + 25, C_SEP);
 
         // close hint
         String closeText = "[ESC]";
-        ctx.drawString(mc.font, closeText, pRight - 8 - mc.font.width(closeText), py + 10, C_TXT3);
+        ctx.drawString(CustomFont.font(), closeText, pRight - 8 - CustomFont.font().width(closeText), py + 10, C_TXT3);
 
         // settings list
         int listTop = py + 32;
@@ -261,8 +346,8 @@ public class ClickGuiScreen extends Screen {
         String footer = "LMB: Toggle | RMB: Settings | Scroll: Navigate | ESC: Close";
         int fy = gyBottom - 18;
         RenderUtil.rect(ctx, gx, fy, gx + GUI_W, gyBottom, C_PANEL);
-        ctx.drawString(mc.font, footer,
-                gx + (GUI_W - mc.font.width(footer)) / 2,
+        ctx.drawString(CustomFont.font(), footer,
+                gx + (GUI_W - CustomFont.font().width(footer)) / 2,
                 fy + 5, C_TXT3);
     }
 
@@ -272,6 +357,7 @@ public class ClickGuiScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
+        if (closing) return true;
         int mx = (int) click.x();
         int my = (int) click.y();
         int btn = click.button();
@@ -289,7 +375,7 @@ public class ClickGuiScreen extends Screen {
         if (my >= guiY && my < guiY + TAB_H) {
             int tx = guiX + 8;
             for (Category cat : Category.values()) {
-                int tw = mc.font.width(cat.getName()) + 16;
+                int tw = CustomFont.font().width(cat.getName()) + 16;
                 if (mx >= tx && mx < tx + tw) {
                     selCategory = cat;
                     selModule = null;
@@ -359,8 +445,8 @@ public class ClickGuiScreen extends Screen {
 
             // check close button
             String closeText = "[ESC]";
-            int closeX = settingsRight - 8 - mc.font.width(closeText);
-            if (mx >= closeX && mx < closeX + mc.font.width(closeText) && my >= guiY + 8 && my < guiY + 22) {
+            int closeX = settingsRight - 8 - CustomFont.font().width(closeText);
+            if (mx >= closeX && mx < closeX + CustomFont.font().width(closeText) && my >= guiY + 8 && my < guiY + 22) {
                 selModule = null;
                 settingComponents.clear();
                 return true;
@@ -551,6 +637,20 @@ public class ClickGuiScreen extends Screen {
 
     @Override
     public boolean isPauseScreen() { return false; }
+
+    @Override
+    public void onClose() {
+        // Start the close animation; the actual screen close (super.onClose)
+        // happens in render() once anim reaches 0.
+        if (closing) return;
+        closing = true;
+        animStartNs = System.nanoTime();
+        if (!ClickGuiModule.getInstance().animationsEnabled.getValue()) {
+            anim = 0f;
+            closing = false;
+            super.onClose();
+        }
+    }
 
     @Override
     public void renderBackground(GuiGraphics ctx, int mx, int my, float delta) {}

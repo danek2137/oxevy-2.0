@@ -2,6 +2,7 @@ package me.alpha432.oxevy.features.gui;
 
 import me.alpha432.oxevy.features.modules.client.ClickGuiModule;
 import me.alpha432.oxevy.features.settings.Setting;
+import me.alpha432.oxevy.util.render.CustomFont;
 import me.alpha432.oxevy.util.render.RenderUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -20,7 +21,7 @@ public class BooleanComponent extends SettingComponent {
         Color accent = ClickGuiModule.getInstance().color.getValue();
 
         RenderUtil.roundRect(context, x, y, width, height, 10f, hovered ? 0x1AFFFFFF : 0x12FFFFFF);
-        context.drawString(mc.font, setting.getName(), x + 10, y + (height - 8) / 2, 0xFFE6E6E6);
+        context.drawString(CustomFont.font(), setting.getName(), x + 10, y + (height - 8) / 2, 0xFFE6E6E6);
 
         int trackWidth = 22;
         int trackHeight = 10;

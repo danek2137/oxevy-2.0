@@ -2,6 +2,7 @@ package me.alpha432.oxevy.features.gui;
 
 import me.alpha432.oxevy.features.modules.client.ClickGuiModule;
 import me.alpha432.oxevy.features.settings.Setting;
+import me.alpha432.oxevy.util.render.CustomFont;
 import me.alpha432.oxevy.util.render.RenderUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -28,10 +29,10 @@ public class SliderComponent extends SettingComponent {
         RenderUtil.rect(context, x, y, x + width, y + height, isHovered(mouseX, mouseY) ? 0x12FFFFFF : 0x08FFFFFF);
 
         int textY = y + 1;
-        context.drawString(mc.font, setting.getName(), x + 4, textY, 0xFFBBBBBB);
+        context.drawString(CustomFont.font(), setting.getName(), x + 4, textY, 0xFFBBBBBB);
 
         String valueText = formatValue((Number) setting.getValue());
-        context.drawString(mc.font, valueText, x + width - 4 - mc.font.width(valueText), textY, accent.getRGB());
+        context.drawString(CustomFont.font(), valueText, x + width - 4 - CustomFont.font().width(valueText), textY, accent.getRGB());
 
         int trackX = x + 4;
         int trackY = y + height - 5;

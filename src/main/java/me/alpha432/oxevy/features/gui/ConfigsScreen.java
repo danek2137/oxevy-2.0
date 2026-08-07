@@ -2,6 +2,9 @@ package me.alpha432.oxevy.features.gui;
 
 import me.alpha432.oxevy.Oxevy;
 import me.alpha432.oxevy.features.modules.client.ClickGuiModule;
+import me.alpha432.oxevy.manager.ConfigManager;
+import me.alpha432.oxevy.util.render.AnimationUtil;
+import me.alpha432.oxevy.util.render.CustomFont;
 import me.alpha432.oxevy.util.render.RenderUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -18,8 +21,12 @@ import java.util.List;
 public class ConfigsScreen extends net.minecraft.client.gui.screens.Screen {
     private static final Minecraft mc = Minecraft.getInstance();
 
-    private static final int WIDTH = 400;
-    private static final int HEIGHT = 300;
+    private static final int WIDTH = 480;
+    private static final int HEIGHT = 340;
+    private static final int ROW_STEP = 28;
+    private static final int ROW_H = 22;
+
+    private float openAnimation = 0f;
 
     private List<String> profiles;
     private int scrollOffset = 0;
@@ -29,9 +36,7 @@ public class ConfigsScreen extends net.minecraft.client.gui.screens.Screen {
     private boolean showCreateField = false;
     private EditBox createField;
 
-    // action confirm
     private String confirmProfile = null;
-    private String confirmAction = null;
 
     public ConfigsScreen() {
         super(Component.literal("Config Manager"));
@@ -40,134 +45,126 @@ public class ConfigsScreen extends net.minecraft.client.gui.screens.Screen {
 
     @Override
     protected void init() {
-        createField = new EditBox(font, width / 2 - 80, height / 2 + 10, 160, 18, Component.literal("Profile name"));
+        createField = new EditBox(CustomFont.font(), width / 2 - 80, height / 2 + 10, 160, 18, Component.literal("Profile name"));
         createField.setMaxLength(32);
-        createField.setVisible(showCreateField);
-        addWidget(createField);
+        createField.setVisible(false);
+        createField.setValue("");
     }
 
     private void refreshProfiles() {
         profiles = Oxevy.configManager.listConfigs();
+        int last = profiles.size() * ROW_STEP;
+        maxScroll = Math.max(0, last - (HEIGHT - 90));
+        scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
+    }
+
+    private int accent() {
+        return ClickGuiModule.getInstance().color.getValue().getRGB();
     }
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        openAnimation = AnimationUtil.animate(openAnimation, 1.0f, 0.15f, AnimationUtil.Easing.EASE_OUT);
+
         int x = (context.guiWidth() - WIDTH) / 2;
         int y = (context.guiHeight() - HEIGHT) / 2;
 
-        context.fill(0, 0, context.guiWidth(), context.guiHeight(), new Color(0, 0, 0, 150).getRGB());
+        context.fill(0, 0, context.guiWidth(), context.guiHeight(), new Color(0, 0, 0, (int) (150 * openAnimation)).getRGB());
 
         RenderUtil.rect(context, x, y, x + WIDTH, y + HEIGHT, 0xFF121212);
-        RenderUtil.rect(context, x, y, x + WIDTH, y + 2, ClickGuiModule.getInstance().color.getValue().getRGB());
+        RenderUtil.rect(context, x, y, x + WIDTH, y + 2, accent());
 
-        context.drawString(font, "Config Manager", x + 15, y + 12, 0xFFAAAAAA);
+        context.drawString(CustomFont.font(), "Config Manager", x + 15, y + 12, 0xFFAAAAAA);
 
         String cur = Oxevy.configManager.getCurrentConfig();
-        context.drawString(font, "Current: " + cur, x + WIDTH - 15 - font.width("Current: " + cur), y + 12, 0xFF55FF55);
+        String curText = "Current: " + cur;
+        context.drawString(CustomFont.font(), curText, x + WIDTH - 15 - CustomFont.font().width(curText), y + 12, 0xFF55FF55);
 
         // Profile list
         int contentY = y + 35 - scrollOffset;
-        int idx = 0;
         String current = Oxevy.configManager.getCurrentConfig();
         for (String profile : profiles) {
-            boolean hovered = mouseX >= x + 15 && mouseX <= x + WIDTH - 15 && mouseY >= contentY && mouseY <= contentY + 22;
-            boolean isCurrent = profile.equals(current);
+            if (contentY >= y + 35 && contentY <= y + HEIGHT - 60) {
+                boolean hovered = mouseX >= x + 15 && mouseX <= x + WIDTH - 15 && mouseY >= contentY && mouseY <= contentY + ROW_H;
+                boolean isCurrent = profile.equals(current);
 
-            int bgColor = isCurrent ? 0xFF2A2A3A : (hovered ? 0x1AFFFFFF : 0x12FFFFFF);
-            RenderUtil.roundRect(context, x + 15, contentY, WIDTH - 30, 22, 6f, bgColor);
+                int bgColor = isCurrent ? 0xFF2A2A3A : (hovered ? 0x1AFFFFFF : 0x12FFFFFF);
+                RenderUtil.roundRect(context, x + 15, contentY, WIDTH - 30, ROW_H, 6f, bgColor);
 
-            if (isCurrent) {
-                RenderUtil.rect(context, x + 15, contentY, x + 17, contentY + 22, ClickGuiModule.getInstance().color.getValue().getRGB());
+                if (isCurrent) {
+                    RenderUtil.roundRect(context, x + 15, contentY, 4, ROW_H, 2f, accent());
+                }
+
+                context.drawString(CustomFont.font(), profile, x + 27, contentY + 7, isCurrent ? 0xFFFFFFFF : 0xFFE6E6E6);
+
+                // Delete button (not for default)
+                if (!"default".equals(profile)) {
+                    boolean delHover = mouseX >= x + WIDTH - 48 && mouseX <= x + WIDTH - 32 && mouseY >= contentY + 4 && mouseY <= contentY + 18;
+                    RenderUtil.roundRect(context, x + WIDTH - 48, contentY + 4, 16, 14, 4f, delHover ? 0x55FF5555 : 0x22FFFFFF);
+                    context.drawString(CustomFont.font(), "x", x + WIDTH - 43, contentY + 7, 0xFFFF5555);
+                }
             }
-
-            context.drawString(font, profile, x + 24, contentY + 7, isCurrent ? 0xFFFFFFFF : 0xFFE6E6E6);
-
-            // Delete button (not for default)
-            if (!"default".equals(profile)) {
-                boolean delHover = mouseX >= x + WIDTH - 50 && mouseX <= x + WIDTH - 34 && mouseY >= contentY + 4 && mouseY <= contentY + 18;
-                RenderUtil.roundRect(context, x + WIDTH - 50, contentY + 4, 16, 14, 4f, delHover ? 0x44FF5555 : 0x22FFFFFF);
-                context.drawString(font, "x", x + WIDTH - 44, contentY + 7, 0xFFFF5555);
-            }
-
-            idx++;
-            contentY += 28;
+            contentY += ROW_STEP;
         }
 
-        maxScroll = Math.max(0, contentY - (y + HEIGHT) + 50);
-
         // Bottom action bar
-        int barY = y + HEIGHT - 30;
-
-        // Save button
-        boolean saveHover = mouseX >= x + 15 && mouseX <= x + 85 && mouseY >= barY && mouseY <= barY + 20;
-        RenderUtil.roundRect(context, x + 15, barY, 70, 20, 4f, saveHover ? 0x33FFFFFF : 0x22FFFFFF);
-        context.drawString(font, "Save", x + 35, barY + 6, 0xFF55FF55);
-
-        // Load button
-        boolean loadHover = mouseX >= x + 95 && mouseX <= x + 165 && mouseY >= barY && mouseY <= barY + 20;
-        RenderUtil.roundRect(context, x + 95, barY, 70, 20, 4f, loadHover ? 0x33FFFFFF : 0x22FFFFFF);
-        context.drawString(font, "Load", x + 118, barY + 6, 0xFF55CCFF);
-
-        // Create button
-        boolean createHover = mouseX >= x + 175 && mouseX <= x + 245 && mouseY >= barY && mouseY <= barY + 20;
-        RenderUtil.roundRect(context, x + 175, barY, 70, 20, 4f, createHover ? 0x33FFFFFF : 0x22FFFFFF);
-        context.drawString(font, "Create", x + 193, barY + 6, 0xFFFFFF55);
-
-        // Refresh button
-        boolean refHover = mouseX >= x + WIDTH - 45 && mouseX <= x + WIDTH - 15 && mouseY >= barY && mouseY <= barY + 20;
-        RenderUtil.roundRect(context, x + WIDTH - 45, barY, 30, 20, 4f, refHover ? 0x33FFFFFF : 0x22FFFFFF);
-        context.drawString(font, "R", x + WIDTH - 32, barY + 6, 0xFFAAAAAA);
+        int barY = y + HEIGHT - 34;
+        drawButton(context, x + 15, barY, 80, 20, "Save", 0xFF55FF55, mouseX, mouseY);
+        drawButton(context, x + 105, barY, 80, 20, "Load", 0xFF55CCFF, mouseX, mouseY);
+        drawButton(context, x + 195, barY, 80, 20, "Create", 0xFFFFFF55, mouseX, mouseY);
+        drawButton(context, x + WIDTH - 55, barY, 40, 20, "R", 0xFFAAAAAA, mouseX, mouseY);
 
         // Create field overlay
         if (showCreateField) {
-            int fx = width / 2 - 100;
-            int fy = height / 2 - 40;
-            int fw = 200;
-            int fh = 90;
-            RenderUtil.rect(context, fx - 10, fy - 10, fx + fw + 10, fy + fh + 10, 0xE0121212);
-            RenderUtil.rect(context, fx - 10, fy - 10, fx + fw + 10, fy - 8, ClickGuiModule.getInstance().color.getValue().getRGB());
-            context.drawString(font, "New Profile Name", fx, fy + 2, 0xFFAAAAAA);
-            createField.setX(fx);
-            createField.setY(fy + 20);
-            createField.setWidth(fw);
-            createField.visible = true;
+            int fx = x + WIDTH / 2 - 120;
+            int fy = y + HEIGHT / 2 - 60;
+            int fw = 240;
+            int fh = 120;
+            RenderUtil.rect(context, fx, fy, fx + fw, fy + fh, 0xE0121212);
+            RenderUtil.rect(context, fx, fy, fx + fw, fy + 2, accent());
+            context.drawString(CustomFont.font(), "New Profile Name", fx + 15, fy + 12, 0xFFAAAAAA);
+
+            createField.setX(fx + 15);
+            createField.setY(fy + 30);
+            createField.setWidth(fw - 30);
+            createField.setVisible(true);
             createField.render(context, mouseX, mouseY, delta);
 
-            // Confirm button
-            boolean conHover = mouseX >= fx && mouseX <= fx + 80 && mouseY >= fy + 48 && mouseY <= fy + 68;
-            RenderUtil.roundRect(context, fx, fy + 48, 80, 20, 4f, conHover ? 0x33FFFFFF : 0x22FFFFFF);
-            context.drawString(font, "Create", fx + 22, fy + 54, 0xFF55FF55);
-
-            // Cancel button
-            boolean canHover = mouseX >= fx + 90 && mouseX <= fx + 200 && mouseY >= fy + 48 && mouseY <= fy + 68;
-            RenderUtil.roundRect(context, fx + 90, fy + 48, 110, 20, 4f, canHover ? 0x33FFFFFF : 0x22FFFFFF);
-            context.drawString(font, "Cancel", fx + 128, fy + 54, 0xFFFF5555);
+            drawButton(context, fx + 15, fy + 64, 100, 20, "Create", 0xFF55FF55, mouseX, mouseY);
+            drawButton(context, fx + 125, fy + 64, 100, 20, "Cancel", 0xFFFF5555, mouseX, mouseY);
         } else {
             createField.visible = false;
         }
 
         // Confirmation dialog
         if (confirmProfile != null) {
-            int fx = width / 2 - 100;
-            int fy = height / 2 - 30;
-            int fw = 200;
-            int fh = 70;
-            RenderUtil.rect(context, fx - 10, fy - 10, fx + fw + 10, fy + fh + 10, 0xE0121212);
-            context.drawString(font, "Delete profile: " + confirmProfile + "?", fx, fy + 2, 0xFFFF5555);
-            boolean yesHover = mouseX >= fx && mouseX <= fx + 80 && mouseY >= fy + 28 && mouseY <= fy + 48;
-            RenderUtil.roundRect(context, fx, fy + 28, 80, 20, 4f, yesHover ? 0x33FFFFFF : 0x22FFFFFF);
-            context.drawString(font, "Yes", fx + 30, fy + 34, 0xFFFF5555);
-            boolean noHover = mouseX >= fx + 90 && mouseX <= fx + 200 && mouseY >= fy + 28 && mouseY <= fy + 48;
-            RenderUtil.roundRect(context, fx + 90, fy + 28, 110, 20, 4f, noHover ? 0x33FFFFFF : 0x22FFFFFF);
-            context.drawString(font, "Cancel", fx + 128, fy + 34, 0xFFAAAAAA);
+            int fx = x + WIDTH / 2 - 120;
+            int fy = y + HEIGHT / 2 - 45;
+            int fw = 240;
+            int fh = 90;
+            RenderUtil.rect(context, fx, fy, fx + fw, fy + fh, 0xE0121212);
+            RenderUtil.rect(context, fx, fy, fx + fw, fy + 2, 0xFFFF5555);
+            context.drawString(CustomFont.font(), "Delete profile: " + confirmProfile + "?", fx + 15, fy + 14, 0xFFFF5555);
+            drawButton(context, fx + 15, fy + 44, 100, 20, "Yes", 0xFFFF5555, mouseX, mouseY);
+            drawButton(context, fx + 125, fy + 44, 100, 20, "Cancel", 0xFFAAAAAA, mouseX, mouseY);
         }
 
         if (messageTimer > 0) messageTimer--;
         if (!message.isEmpty() && messageTimer > 0) {
-            context.drawString(font, message, x + 15, y + HEIGHT - 50, 0xFF55FF55);
+            context.drawString(CustomFont.font(), message, x + 15, y + HEIGHT - 52, 0xFF55FF55);
         }
 
         super.render(context, mouseX, mouseY, delta);
+    }
+
+    private void drawButton(GuiGraphics context, int bx, int by, int bw, int bh, String label, int textColor, int mouseX, int mouseY) {
+        boolean hovered = mouseX >= bx && mouseX <= bx + bw && mouseY >= by && mouseY <= by + bh;
+        RenderUtil.roundRect(context, bx, by, bw, bh, 4f, hovered ? 0x33FFFFFF : 0x22FFFFFF);
+        context.drawString(CustomFont.font(), label, bx + (bw - CustomFont.font().width(label)) / 2, by + 6, textColor);
+    }
+
+    private boolean inRect(double mouseX, double mouseY, int rx, int ry, int rw, int rh) {
+        return mouseX >= rx && mouseX <= rx + rw && mouseY >= ry && mouseY <= ry + rh;
     }
 
     @Override
@@ -182,18 +179,19 @@ public class ConfigsScreen extends net.minecraft.client.gui.screens.Screen {
         if (button == 0) {
             // Confirmation dialog
             if (confirmProfile != null) {
-                int fx = width / 2 - 100;
-                int fy = height / 2 - 30;
-                boolean yesHover = mouseX >= fx && mouseX <= fx + 80 && mouseY >= fy + 28 && mouseY <= fy + 48;
-                boolean noHover = mouseX >= fx + 90 && mouseX <= fx + 200 && mouseY >= fy + 28 && mouseY <= fy + 48;
-                if (yesHover) {
-                    Oxevy.configManager.deleteProfile(confirmProfile);
+                int fx = x + WIDTH / 2 - 120;
+                int fy = y + HEIGHT / 2 - 45;
+                if (inRect(mouseX, mouseY, fx + 15, fy + 44, 100, 20)) {
+                    if (Oxevy.configManager.deleteProfile(confirmProfile)) {
+                        setMessage("Deleted profile: " + confirmProfile);
+                    } else {
+                        setMessage("Failed to delete profile");
+                    }
                     refreshProfiles();
-                    setMessage("Deleted profile: " + confirmProfile);
                     confirmProfile = null;
                     return true;
                 }
-                if (noHover) {
+                if (inRect(mouseX, mouseY, fx + 125, fy + 44, 100, 20)) {
                     confirmProfile = null;
                     return true;
                 }
@@ -202,24 +200,19 @@ public class ConfigsScreen extends net.minecraft.client.gui.screens.Screen {
 
             // Create field dialog
             if (showCreateField) {
-                int fx = width / 2 - 100;
-                int fy = height / 2 - 40;
-                boolean conHover = mouseX >= fx && mouseX <= fx + 80 && mouseY >= fy + 48 && mouseY <= fy + 68;
-                boolean canHover = mouseX >= fx + 90 && mouseX <= fx + 200 && mouseY >= fy + 48 && mouseY <= fy + 68;
-                if (conHover) {
-                    String name = createField.getValue().trim().toLowerCase().replace(" ", "_");
-                    if (!name.isEmpty() && !profiles.contains(name)) {
-                        Oxevy.configManager.saveProfile(name);
-                        refreshProfiles();
-                        setMessage("Created profile: " + name);
-                    }
-                    showCreateField = false;
-                    createField.setValue("");
+                int fx = x + WIDTH / 2 - 120;
+                int fy = y + HEIGHT / 2 - 60;
+                if (inRect(mouseX, mouseY, fx + 15, fy + 64, 100, 20)) {
+                    commitCreate();
                     return true;
                 }
-                if (canHover) {
-                    showCreateField = false;
-                    createField.setValue("");
+                if (inRect(mouseX, mouseY, fx + 125, fy + 64, 100, 20)) {
+                    closeCreate();
+                    return true;
+                }
+                if (inRect(mouseX, mouseY, fx + 15, fy + 30, 210, 18)) {
+                    createField.mouseClicked(click, doubled);
+                    createField.setFocused(true);
                     return true;
                 }
                 return true;
@@ -227,55 +220,45 @@ public class ConfigsScreen extends net.minecraft.client.gui.screens.Screen {
 
             // Click on a profile row
             int contentY = y + 35 - scrollOffset;
-            for (int idx = 0; idx < profiles.size(); idx++) {
-                String profile = profiles.get(idx);
-                boolean inRow = mouseX >= x + 15 && mouseX <= x + WIDTH - 15 && mouseY >= contentY && mouseY <= contentY + 22;
+            for (String profile : profiles) {
+                boolean inRow = mouseX >= x + 15 && mouseX <= x + WIDTH - 15 && mouseY >= contentY && mouseY <= contentY + ROW_H;
                 if (inRow) {
-                    // Delete button
-                    if (!"default".equals(profile)) {
-                        boolean delHover = mouseX >= x + WIDTH - 50 && mouseX <= x + WIDTH - 34 && mouseY >= contentY + 4 && mouseY <= contentY + 18;
-                        if (delHover) {
-                            confirmProfile = profile;
-                            return true;
-                        }
+                    if (!"default".equals(profile) && inRect(mouseX, mouseY, x + WIDTH - 48, contentY + 4, 16, 14)) {
+                        confirmProfile = profile;
+                        return true;
                     }
-                    // Click on row = load
-                    Oxevy.configManager.loadProfile(profile);
+                    if (Oxevy.configManager.loadProfile(profile)) {
+                        setMessage("Loaded profile: " + profile);
+                    } else {
+                        setMessage("Failed to load profile");
+                    }
                     refreshProfiles();
-                    setMessage("Loaded profile: " + profile);
                     return true;
                 }
-                contentY += 28;
+                contentY += ROW_STEP;
             }
 
             // Bottom buttons
-            int barY = y + HEIGHT - 30;
-
-            boolean saveHover = mouseX >= x + 15 && mouseX <= x + 85 && mouseY >= barY && mouseY <= barY + 20;
-            if (saveHover) {
+            int barY = y + HEIGHT - 34;
+            if (inRect(mouseX, mouseY, x + 15, barY, 80, 20)) {
                 Oxevy.configManager.save();
                 refreshProfiles();
                 setMessage("Config saved");
                 return true;
             }
-
-            boolean loadHover = mouseX >= x + 95 && mouseX <= x + 165 && mouseY >= barY && mouseY <= barY + 20;
-            if (loadHover) {
+            if (inRect(mouseX, mouseY, x + 105, barY, 80, 20)) {
                 Oxevy.configManager.load();
                 refreshProfiles();
                 setMessage("Config loaded from disk");
                 return true;
             }
-
-            boolean createHover = mouseX >= x + 175 && mouseX <= x + 245 && mouseY >= barY && mouseY <= barY + 20;
-            if (createHover) {
+            if (inRect(mouseX, mouseY, x + 195, barY, 80, 20)) {
                 showCreateField = true;
                 createField.setValue("");
+                createField.setFocused(true);
                 return true;
             }
-
-            boolean refHover = mouseX >= x + WIDTH - 45 && mouseX <= x + WIDTH - 15 && mouseY >= barY && mouseY <= barY + 20;
-            if (refHover) {
+            if (inRect(mouseX, mouseY, x + WIDTH - 55, barY, 40, 20)) {
                 refreshProfiles();
                 setMessage("Refreshed");
                 return true;
@@ -290,8 +273,38 @@ public class ConfigsScreen extends net.minecraft.client.gui.screens.Screen {
         return super.mouseClicked(click, doubled);
     }
 
+    private void commitCreate() {
+        String name = createField.getValue().trim().toLowerCase().replace(" ", "_");
+        if (name.isEmpty() || !ConfigManager.isValidName(name)) {
+            setMessage("Invalid profile name");
+            createField.setValue("");
+            createField.setFocused(true);
+            return;
+        }
+        if (profiles.contains(name)) {
+            setMessage("Profile already exists: " + name);
+            createField.setValue("");
+            createField.setFocused(true);
+            return;
+        }
+        if (Oxevy.configManager.saveProfile(name)) {
+            setMessage("Created profile: " + name);
+        } else {
+            setMessage("Failed to create profile");
+        }
+        closeCreate();
+        refreshProfiles();
+    }
+
+    private void closeCreate() {
+        showCreateField = false;
+        createField.setValue("");
+        createField.setFocused(false);
+    }
+
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (confirmProfile != null || showCreateField) return true;
         scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) (verticalAmount * 10)));
         return true;
     }
@@ -300,22 +313,31 @@ public class ConfigsScreen extends net.minecraft.client.gui.screens.Screen {
     public boolean keyPressed(KeyEvent input) {
         if (showCreateField) {
             if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
-                showCreateField = false;
-                createField.setValue("");
+                closeCreate();
                 return true;
             }
             if (input.key() == GLFW.GLFW_KEY_ENTER || input.key() == GLFW.GLFW_KEY_KP_ENTER) {
-                String name = createField.getValue().trim().toLowerCase().replace(" ", "_");
-                if (!name.isEmpty() && !profiles.contains(name)) {
-                    Oxevy.configManager.saveProfile(name);
-                    refreshProfiles();
-                    setMessage("Created profile: " + name);
-                }
-                showCreateField = false;
-                createField.setValue("");
+                commitCreate();
                 return true;
             }
             return createField.keyPressed(input);
+        }
+        if (confirmProfile != null) {
+            if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
+                confirmProfile = null;
+                return true;
+            }
+            if (input.key() == GLFW.GLFW_KEY_ENTER || input.key() == GLFW.GLFW_KEY_KP_ENTER) {
+                if (Oxevy.configManager.deleteProfile(confirmProfile)) {
+                    setMessage("Deleted profile: " + confirmProfile);
+                } else {
+                    setMessage("Failed to delete profile");
+                }
+                refreshProfiles();
+                confirmProfile = null;
+                return true;
+            }
+            return true;
         }
         if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
             onClose();

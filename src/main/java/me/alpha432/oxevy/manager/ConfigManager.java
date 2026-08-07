@@ -46,6 +46,7 @@ public class ConfigManager {
         try (Stream<Path> dirs = Files.list(CONFIGS_PATH)) {
             List<String> names = dirs.filter(Files::isDirectory)
                     .map(p -> p.getFileName().toString())
+                    .filter(ConfigManager::isValidName)
                     .sorted()
                     .collect(Collectors.toList());
             if (!names.contains("default")) names.add(0, "default");
@@ -56,6 +57,8 @@ public class ConfigManager {
     }
 
     public boolean saveProfile(String name) {
+        name = name.trim().toLowerCase();
+        if (!isValidName(name)) return false;
         mkdirs();
         Path configDir = CONFIGS_PATH.resolve(name);
         try {
@@ -65,6 +68,8 @@ public class ConfigManager {
                 if (fn == null || fn.isEmpty()) continue;
                 Files.writeString(configDir.resolve(fn), GSON.toJson(jsonable.toJson()));
             }
+            currentConfig = name;
+            saveCurrentConfigName();
             return true;
         } catch (IOException e) {
             LOGGER.error("Failed to save profile '{}'", name, e);
@@ -73,8 +78,17 @@ public class ConfigManager {
     }
 
     public boolean loadProfile(String name) {
+        name = name.trim().toLowerCase();
+        if (!isValidName(name)) return false;
         Path configDir = CONFIGS_PATH.resolve(name);
-        if (!configDir.toFile().exists()) return false;
+        if (!configDir.toFile().exists()) {
+            if ("default".equals(name)) {
+                currentConfig = "default";
+                saveCurrentConfigName();
+                return true;
+            }
+            return false;
+        }
         for (Jsonable jsonable : jsonables) {
             String fn = jsonable.getFileName();
             if (fn == null || fn.isEmpty()) continue;
@@ -92,7 +106,8 @@ public class ConfigManager {
     }
 
     public boolean deleteProfile(String name) {
-        if ("default".equals(name)) return false;
+        name = name.trim().toLowerCase();
+        if ("default".equals(name) || !isValidName(name)) return false;
         Path configDir = CONFIGS_PATH.resolve(name);
         if (!configDir.toFile().exists()) return false;
         try {
@@ -181,11 +196,19 @@ public class ConfigManager {
     private void loadCurrentConfigName() {
         try {
             if (CURRENT_FILE.toFile().exists()) {
-                currentConfig = Files.readString(CURRENT_FILE).trim();
+                currentConfig = Files.readString(CURRENT_FILE).trim().toLowerCase();
+                if (!isValidName(currentConfig)) {
+                    currentConfig = "default";
+                }
             }
         } catch (IOException e) {
             currentConfig = "default";
         }
+    }
+
+    /** Profiles may only be made of lowercase letters, digits, underscores or dashes. */
+    public static boolean isValidName(String name) {
+        return name != null && name.matches("[a-z0-9_-]+");
     }
 
     private void saveCurrentConfigName() {

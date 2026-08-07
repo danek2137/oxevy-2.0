@@ -2,6 +2,7 @@ package me.alpha432.oxevy.features.gui;
 
 import me.alpha432.oxevy.Oxevy;
 import me.alpha432.oxevy.features.modules.client.ClickGuiModule;
+import me.alpha432.oxevy.util.render.CustomFont;
 import me.alpha432.oxevy.util.render.RenderUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -146,15 +147,15 @@ public class OxevyMainMenu extends Screen {
 
         // Logo
         context.pose().pushMatrix();
-        float logoScale = 3.2f;
+        float logoScale = 1.48f;
         context.pose().translate(sidebarW / 2.0f, 32);
         context.pose().scale(logoScale, logoScale);
-        context.drawString(font, "OXEVY", -font.width("OXEVY") / 2, 0, accentRGB, true);
+        context.drawString(CustomFont.logo(), "OXEVY", -CustomFont.logo().width("OXEVY") / 2, 0, accentRGB, true);
         context.pose().popMatrix();
 
         // Subtitle
         String subtitle = "PREMIUM MINECRAFT CLIENT";
-        context.drawString(font, subtitle, sidebarW / 2 - font.width(subtitle) / 2, 65, 0xFF888899, false);
+        context.drawString(CustomFont.font(), subtitle, sidebarW / 2 - CustomFont.font().width(subtitle) / 2, 65, 0xFF888899, false);
 
         // Divider
         RenderUtil.rect(context, 15, 80, sidebarW - 15, 81, 0x1EFFFFFF);
@@ -187,7 +188,7 @@ public class OxevyMainMenu extends Screen {
             // Text with slide offset
             float textX = btnX + 10 + (btnHoverStates[i] * 5f);
             int textColor = hovered ? 0xFFFFFFFF : 0xFFCCCCCC;
-            context.drawString(font, BTN_TEXTS[i], (int) textX, y + (btnH - 8) / 2, textColor, false);
+            context.drawString(CustomFont.font(), BTN_TEXTS[i], (int) textX, y + (btnH - 8) / 2, textColor, false);
         }
 
         // Sidebar Footer Player Profile
@@ -195,7 +196,7 @@ public class OxevyMainMenu extends Screen {
         RenderUtil.rect(context, 15, footerY - 10, sidebarW - 15, footerY - 9, 0x1EFFFFFF);
 
         String username = minecraft.getUser().getName();
-        context.drawString(font, "Welcome, " + username, 20, footerY, 0xFFE2E8F0, false);
+        context.drawString(CustomFont.font(), "Welcome, " + username, 20, footerY, 0xFFE2E8F0, false);
 
         // TODO: Client Update Log (commented out for now)
         // int rightCardX = sidebarW + 30;
@@ -205,7 +206,7 @@ public class OxevyMainMenu extends Screen {
         // if (changelogH > 80) {
         //     RenderUtil.roundRect(context, rightCardX, rightCardY, rightCardW, changelogH, 6f, 0xAA080812);
         //     RenderUtil.rect(context, rightCardX, rightCardY, rightCardX + rightCardW, rightCardY + 2, accentRGB);
-        //     context.drawString(font, "CLIENT UPDATE LOG", rightCardX + 15, rightCardY + 12, accentRGB, false);
+        //     context.drawString(CustomFont.font(), "CLIENT UPDATE LOG", rightCardX + 15, rightCardY + 12, accentRGB, false);
         //     String[] logs = {
         //         "- v1.0.0 Release stable build",
         //         "- Brand new modern Sidebar Menu",
@@ -217,14 +218,14 @@ public class OxevyMainMenu extends Screen {
         //     int textY = rightCardY + 34;
         //     for (String log : logs) {
         //         if (textY + 12 > rightCardY + changelogH - 10) break;
-        //         context.drawString(font, log, rightCardX + 15, textY, 0xFF94A3B8, false);
+        //         context.drawString(CustomFont.font(), log, rightCardX + 15, textY, 0xFF94A3B8, false);
         //         textY += 14;
         //     }
         // }
 
         // Bottom right watermark info
         String verInfo = "Oxevy Client v1.0.0 | MC 1.21.1";
-        context.drawString(font, verInfo, width - font.width(verInfo) - 15, height - 20, 0xFF475569, false);
+        context.drawString(CustomFont.font(), verInfo, width - CustomFont.font().width(verInfo) - 15, height - 20, 0xFF475569, false);
 
         super.render(context, mouseX, mouseY, delta);
     }

@@ -4,6 +4,7 @@ import me.alpha432.oxevy.Oxevy;
 import me.alpha432.oxevy.features.modules.client.ClickGuiModule;
 import me.alpha432.oxevy.features.modules.hud.HudModule;
 import me.alpha432.oxevy.features.commands.Command;
+import me.alpha432.oxevy.util.render.CustomFont;
 import me.alpha432.oxevy.util.render.RenderUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -64,7 +65,7 @@ public class HudEditorScreen extends Screen {
         
         // Editor instructions
         String text = "HUD Editor - Drag modules to reposition";
-        context.drawString(mc.font, text, (context.guiWidth() - mc.font.width(text)) / 2, 10, 0xFFFFFFFF);
+        context.drawString(CustomFont.font(), text, (context.guiWidth() - CustomFont.font().width(text)) / 2, 10, 0xFFFFFFFF);
     }
 
     @Override
