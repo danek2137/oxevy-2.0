@@ -63,6 +63,32 @@ plugins {
     id 'org.jetbrains.kotlin.jvm' version "$kotlin_version"
 }
 
+// ===== Multi-version build =====
+// Defaults come from gradle.properties (currently 1.21.11). Build another version with:
+//   ./gradlew build -PmcVersion=1.21.8
+// Per-version overrides live in versions/<mcVersion>/:
+//   gradle.properties - minecraft/fabric/loader versions
+//   excludes.txt     - shared source/resource files replaced by this version
+//   java/ kotlin/    - version-specific replacements for divergent classes
+//   resources/       - version-specific resource overrides (e.g. mixins json)
+def defaultMcVersion = project.property("minecraft_version").toString()
+def mcVersion = project.findProperty("mcVersion")?.toString() ?: defaultMcVersion
+def mcProfileDir = file("versions/${mcVersion}")
+def mcPropertiesFile = file("${mcProfileDir}/gradle.properties")
+def mcFabricVersion = project.property("fabric_version").toString()
+def mcLoaderVersion = project.property("loader_version").toString()
+if (mcPropertiesFile.exists()) {
+    Properties mcProps = new Properties()
+    mcPropertiesFile.withInputStream { mcProps.load(it) }
+    if (mcProps.getProperty("minecraft_version")) mcVersion = mcProps.getProperty("minecraft_version")
+    if (mcProps.getProperty("fabric_version")) mcFabricVersion = mcProps.getProperty("fabric_version")
+    if (mcProps.getProperty("loader_version")) mcLoaderVersion = mcProps.getProperty("loader_version")
+}
+def mcBuildOverride = mcVersion != defaultMcVersion
+if (mcBuildOverride) {
+    buildDir = file("build/${mcVersion}")
+}
+
 def requestedTasks = gradle.startParameter.taskNames
 def shouldBumpVersion = false
 for (taskName in requestedTasks) {
@@ -119,8 +145,73 @@ buildConfig {
     generateAtSync = true
 }
 
-sourceSets.main.java.srcDirs += "build/gen/buildconfig/src/main"
+sourceSets.main.java.srcDirs += file("${buildDir}/gen/buildconfig/src/main")
 sourceSets.main.kotlin.srcDirs += "src/main/kotlin"
+
+if (mcBuildOverride) {
+    def mergedJava = file("${buildDir}/generated/version-src/java")
+    def mergedKotlin = file("${buildDir}/generated/version-src/kotlin")
+    def mergedResources = file("${buildDir}/generated/version-src/resources")
+
+    def excludes = []
+    def excludesFile = file("${mcProfileDir}/excludes.txt")
+    if (excludesFile.exists()) {
+        excludesFile.eachLine { line ->
+            def l = line.trim()
+            if (l && !l.startsWith("#")) excludes.add(l)
+        }
+    }
+
+    tasks.register("syncVersionSources") {
+        outputs.upToDateWhen { false }
+        doFirst {
+            delete mergedJava, mergedKotlin, mergedResources
+            copy {
+                from("src/main/java")
+                into mergedJava
+            }
+            copy {
+                from("src/main/kotlin")
+                into mergedKotlin
+            }
+            copy {
+                from("src/main/resources")
+                into mergedResources
+            }
+            excludes.each { rel ->
+                delete file("${mergedJava}/${rel}")
+                delete file("${mergedKotlin}/${rel}")
+                delete file("${mergedResources}/${rel}")
+            }
+            if (file("${mcProfileDir}/java").exists()) {
+                copy {
+                    from "${mcProfileDir}/java"
+                    into mergedJava
+                }
+            }
+            if (file("${mcProfileDir}/kotlin").exists()) {
+                copy {
+                    from "${mcProfileDir}/kotlin"
+                    into mergedKotlin
+                }
+            }
+            if (file("${mcProfileDir}/resources").exists()) {
+                copy {
+                    from "${mcProfileDir}/resources"
+                    into mergedResources
+                }
+            }
+        }
+    }
+
+    sourceSets.main.java.srcDirs = [mergedJava, file("${buildDir}/gen/buildconfig/src/main"), file("${buildDir}/generated/sources/buildConfig/main")]
+    sourceSets.main.kotlin.srcDirs = [mergedKotlin, mergedJava, file("${buildDir}/generated/sources/buildConfig/main")]
+    sourceSets.main.resources.srcDirs = [mergedResources]
+
+    tasks.withType(JavaCompile).configureEach { dependsOn("syncVersionSources") }
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { dependsOn("syncVersionSources") }
+    tasks.named("processResources") { dependsOn("syncVersionSources") }
+}
 
 base {
     archivesName = "${project.archives_base_name}"
@@ -137,11 +228,11 @@ loom {
 }
 
 dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    minecraft "com.mojang:minecraft:${mcVersion}"
     mappings loom.officialMojangMappings()
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc:fabric-loader:${mcLoaderVersion}"
     // Fabric API
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${mcFabricVersion}"
 
     include implementation("com.github.cattyngmd.catformat:catformat-core:${project.catformat_version}")
     include modImplementation("com.github.cattyngmd.catformat:catformat-fabric:${project.catformat_version}")
@@ -157,8 +248,8 @@ dependencies {
 
 processResources {
     def modVersion = project.version
-    def minecraftVersion = project.minecraft_version
-    def loaderVersion = project.loader_version
+    def minecraftVersion = mcVersion
+    def loaderVersion = mcLoaderVersion
 
     inputs.property "version", modVersion
     inputs.property "minecraft_version", minecraftVersion

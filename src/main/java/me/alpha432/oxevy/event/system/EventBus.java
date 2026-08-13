@@ -56,7 +56,7 @@ public class EventBus {
             listener.invoke(event);
         }
 
-        return false;
+        return event.isCancelled();
     }
 
     private void register(Object host, Class<?> klass) {

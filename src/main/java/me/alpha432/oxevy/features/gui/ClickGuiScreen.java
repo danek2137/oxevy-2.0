@@ -1,6 +1,7 @@
 package me.alpha432.oxevy.features.gui;
 
 import me.alpha432.oxevy.Oxevy;
+import me.alpha432.oxevy.features.commands.impl.DestructCommand;
 import me.alpha432.oxevy.features.modules.Module;
 import me.alpha432.oxevy.features.modules.Module.Category;
 import me.alpha432.oxevy.features.modules.client.ClickGuiModule;
@@ -47,6 +48,9 @@ public class ClickGuiScreen extends Screen {
     private Setting<String> focusedStringSetting = null;
     private Setting<Bind> listeningBindSetting = null;
 
+    private boolean destructArmed = false;
+    private long destructArmedAt = 0;
+
     // ── Colors ─────────────────────────────────────────────────────
     private static final int C_BG       = 0xFF0A0A12;
     private static final int C_PANEL    = 0xFF12121E;
@@ -60,6 +64,12 @@ public class ClickGuiScreen extends Screen {
     private static final int C_TXT3     = 0xFF475569;
     private static final int C_SEP      = 0xFF1E1E2E;
     private static final int C_TOGGLE_OFF = 0xFF2F2F38;
+    private static final int C_DESTRUCT       = 0xFF5A0A0A;
+    private static final int C_DESTRUCT_HVR   = 0xFF7A1414;
+    private static final int C_DESTRUCT_ARMED = 0xFFE01414;
+
+    private static final long DESTRUCT_TIMEOUT_MS = 3000L;
+    private static final int DESTRUCT_BTN_H = 20;
 
     // ── Layout ─────────────────────────────────────────────────────
     private static final int GUI_W = 620;
@@ -236,7 +246,8 @@ public class ClickGuiScreen extends Screen {
         RenderUtil.rect(ctx, listRight - 1, listTop, listRight, listBottom, C_SEP);
 
         List<Module> mods = getFilteredModules();
-        ctx.enableScissor(listLeft, listTop, listRight, listBottom);
+        int contentBottom = listBottom - DESTRUCT_BTN_H - 20;
+        ctx.enableScissor(listLeft, listTop, listRight, contentBottom);
 
         int yOff = listTop + 4 - scrollOffset;
         int cardW = LEFT_W - 8;
@@ -244,7 +255,7 @@ public class ClickGuiScreen extends Screen {
         for (int i = 0; i < mods.size(); i++) {
             Module mod = mods.get(i);
             if (yOff + CARD_H < listTop) { yOff += CARD_H + CARD_GAP; continue; }
-            if (yOff > listBottom) break;
+            if (yOff > contentBottom) break;
 
             boolean hover = mx >= listLeft + 4 && mx < listLeft + 4 + cardW
                     && my >= yOff && my < yOff + CARD_H;
@@ -284,8 +295,39 @@ public class ClickGuiScreen extends Screen {
             yOff += CARD_H + CARD_GAP;
         }
 
-        maxScroll = Math.max(0, yOff - listBottom + scrollOffset);
+        maxScroll = Math.max(0, yOff - contentBottom + scrollOffset);
         ctx.disableScissor();
+
+        drawDestructButton(ctx, gx, listBottom, mx, my);
+    }
+
+    // ── Destruct Button ───────────────────────────────────────────
+    private void drawDestructButton(GuiGraphics ctx, int gx, int listBottom, int mx, int my) {
+        if (destructArmed && System.currentTimeMillis() - destructArmedAt > DESTRUCT_TIMEOUT_MS) {
+            destructArmed = false;
+        }
+
+        int btnX = gx + 8;
+        int btnY = listBottom - DESTRUCT_BTN_H - 18;
+        int btnW = LEFT_W - 16;
+        boolean hover = mx >= btnX && mx < btnX + btnW && my >= btnY && my < btnY + DESTRUCT_BTN_H;
+
+        int bg;
+        if (destructArmed) {
+            int pulse = (int) (0x7F - 0x60 * (0.5f + 0.5f * Math.sin(System.currentTimeMillis() / 150.0)));
+            bg = (pulse << 24) | (C_DESTRUCT_ARMED & 0x00FFFFFF);
+        } else if (hover) {
+            bg = C_DESTRUCT_HVR;
+        } else {
+            bg = C_DESTRUCT;
+        }
+        RenderUtil.rect(ctx, btnX, btnY, btnX + btnW, btnY + DESTRUCT_BTN_H, bg);
+
+        String label = destructArmed ? "CONFIRM DESTRUCT" : "DESTRUCT CLIENT";
+        int txt = destructArmed ? 0xFFFFFFFF : 0xFFF0B0B0;
+        ctx.drawString(CustomFont.font(), label,
+                btnX + (btnW - CustomFont.font().width(label)) / 2,
+                btnY + (DESTRUCT_BTN_H - 8) / 2, txt);
     }
 
     // ── Settings Panel ─────────────────────────────────────────────
@@ -373,6 +415,7 @@ public class ClickGuiScreen extends Screen {
 
         // tab clicks
         if (my >= guiY && my < guiY + TAB_H) {
+            destructArmed = false;
             int tx = guiX + 8;
             for (Category cat : Category.values()) {
                 int tw = CustomFont.font().width(cat.getName()) + 16;
@@ -402,9 +445,16 @@ public class ClickGuiScreen extends Screen {
         int listLeft = guiX;
         int listRight = guiX + LEFT_W;
 
+        // destruct button click
+        if (mx >= listLeft && mx < listRight && my >= listBottom - DESTRUCT_BTN_H - 18 && my < listBottom - 18) {
+            if (btn == 0) handleDestructClick();
+            return true;
+        }
+
         // module list clicks
-        if (mx >= listLeft && mx < listRight && my >= listTop && my < listBottom - 22) {
+        if (mx >= listLeft && mx < listRight && my >= listTop && my < listBottom - DESTRUCT_BTN_H - 20) {
             searchFocused = false;
+            destructArmed = false;
             List<Module> mods = getFilteredModules();
             int yOff = listTop + 4 - scrollOffset;
             int cardW = LEFT_W - 8;
@@ -482,6 +532,16 @@ public class ClickGuiScreen extends Screen {
         return super.mouseClicked(click, doubled);
     }
 
+    private void handleDestructClick() {
+        if (!destructArmed) {
+            destructArmed = true;
+            destructArmedAt = System.currentTimeMillis();
+            return;
+        }
+        destructArmed = false;
+        DestructCommand.destruct();
+    }
+
     @Override
     public boolean mouseReleased(MouseButtonEvent click) {
         double mouseX = click.x();
@@ -505,7 +565,7 @@ public class ClickGuiScreen extends Screen {
             return true;
         }
         // module list scroll
-        if (mx >= guiX && mx < guiX + LEFT_W && my >= guiY + TAB_H && my < guiY + GUI_H - 22) {
+        if (mx >= guiX && mx < guiX + LEFT_W && my >= guiY + TAB_H && my < guiY + GUI_H - DESTRUCT_BTN_H - 20) {
             scrollOffset = (int) Math.max(0, scrollOffset - vertical * 16);
             scrollOffset = Math.min(scrollOffset, maxScroll);
             return true;

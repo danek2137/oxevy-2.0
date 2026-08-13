@@ -1,0 +1,24 @@
+package me.alpha432.oxevy.mixin.input;
+
+import me.alpha432.oxevy.event.impl.input.KeyInputEvent;
+import net.minecraft.client.KeyboardHandler;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import static me.alpha432.oxevy.util.traits.Util.EVENT_BUS;
+
+@Mixin(KeyboardHandler.class)
+public class MixinKeyboard {
+    @Inject(method = "keyPress", at = @At("TAIL"), cancellable = true)
+    private void onKey(long window, int key, int scancode, int action, int modifiers, CallbackInfo ci) {
+        if (action != 1) {
+            return;
+        }
+
+        if (EVENT_BUS.post(new KeyInputEvent(key))) {
+            ci.cancel();
+        }
+    }
+}
