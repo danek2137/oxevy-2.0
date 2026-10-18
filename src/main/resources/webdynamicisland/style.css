@@ -1,12 +1,12 @@
-/* ── Oxevy Dynamic Island — two exact designs ───────────────────
+/* ── Oxevy Dynamic Island two exact designs ───────────────────
  *
  * The Java side sizes the CEF browser to the widget's GUI size × guiScale
  * physical pixels and blits the texture 1:1 onto the widget. CEF's CSS
  * viewport therefore equals the widget's physical size, so design px are
  * recovered as viewportHeight / designHeight:
  *
- *   idle  design 288×35  → --u = 100vh / 35
- *   music design 371×184 → --m = 100vh / 184
+ * idle design 288×35 → --u = 100vh / 35
+ * music design 371×184 → --m = 100vh / 184
  *
  * Each var is exact in its own mode (the viewport height always matches
  * the active design), so every length below is resolution-independent.
@@ -26,8 +26,8 @@
 }
 
 :root {
-  --u: calc(100vh / 35);           /* idle design pixel  */
-  --m: calc(100vh / 184);          /* music design pixel */
+  --u: calc(100vh / 35); /* idle design pixel */
+  --m: calc(100vh / 184); /* music design pixel */
   font-family: 'Inter', 'SF Pro', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -45,7 +45,7 @@ html, body {
 
 .view { width: 100%; height: 100% }
 
-/* ══ IDLE — 288×35 black pill, centered icon + coords ══════════════ */
+/* ══ IDLE 288×35 black pill, centered icon + coords ══════════════ */
 #idle {
   background: #000;
   border-radius: 999px;
@@ -92,7 +92,7 @@ html, body {
   white-space: nowrap;
 }
 
-/* ══ MUSIC — 371×184 black card ════════════════════════════════════ */
+/* ══ MUSIC 371×184 black card ════════════════════════════════════ */
 #music {
   background: #000;
   border-radius: calc(42 * var(--m));
@@ -206,7 +206,7 @@ html, body {
 }
 .np-btn { display: block }
 #npPause { width: calc(29 * var(--m)); height: calc(29 * var(--m)) }
-#npPlay  { width: calc(29 * var(--m)); height: calc(29 * var(--m)) }
+#npPlay { width: calc(29 * var(--m)); height: calc(29 * var(--m)) }
 .np-airplay {
   width: calc(21 * var(--m));
   height: calc(21 * var(--m));

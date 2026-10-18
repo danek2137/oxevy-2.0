@@ -102,23 +102,23 @@ function getMetrics(data: IslandState): Metric[] {
   const position = data.player?.pos;
   const coords = position
     ? `${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`
-    : "—";
+    : " ";
   const time = data.world?.time
     ? new Date(data.world.time * 1000).toISOString().slice(11, 19)
-    : "—";
+    : " ";
 
   return [
     {
       key: "fps",
       label: "FPS",
-      value: fps?.toString() ?? "—",
+      value: fps?.toString() ?? " ",
       icon: icons.fps,
       tone: fps !== undefined && fps < 30 ? "warn" : "good",
     },
     {
       key: "ping",
       label: "Ping",
-      value: ping !== undefined ? `${ping} ms` : "— ms",
+      value: ping !== undefined ? `${ping} ms` : " ms",
       icon: icons.ping,
       tone: ping !== undefined && ping > 100 ? "warn" : "good",
     },
@@ -144,13 +144,13 @@ function getMetrics(data: IslandState): Metric[] {
     {
       key: "biome",
       label: "Biome",
-      value: data.player?.biome ?? "—",
+      value: data.player?.biome ?? " ",
       icon: icons.biome,
     },
     {
       key: "dimension",
       label: "Dim",
-      value: data.world?.dimension ?? "—",
+      value: data.world?.dimension ?? " ",
       icon: icons.dimension,
     },
   ];

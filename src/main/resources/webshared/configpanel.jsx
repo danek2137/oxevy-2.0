@@ -136,8 +136,8 @@ const ConfigPanel = memo(function ConfigPanel({ onClose }) {
 
   // ── Share codes ────────────────────────────────────────────────────────────
   // A share code is the export bundle packed into one paste-able string:
-  //   OXEVY1D:<base64url(deflate-raw(bundle JSON))>   (compressed)
-  //   OXEVY1R:<base64url(bundle JSON)>                (raw fallback)
+  // OXEVY1D:<base64url(deflate-raw(bundle JSON))> (compressed)
+  // OXEVY1R:<base64url(bundle JSON)> (raw fallback)
   // No server needed - the code carries the whole config, so friends can
   // redeem it even on a different machine.
   const shareCodeOf = async (text) => {
@@ -283,7 +283,7 @@ const ConfigPanel = memo(function ConfigPanel({ onClose }) {
               </div>
             )}
             {configs.length === 0 ? (
-              <div className="cfg-empty">No configs yet &mdash; tap the + to create one.</div>
+              <div className="cfg-empty">No configs yet tap the + to create one.</div>
             ) : null}
           </div>
         </div>
@@ -292,7 +292,7 @@ const ConfigPanel = memo(function ConfigPanel({ onClose }) {
       {exportData ? (
         <div className="cfg-export">
           <div className="cfg-export-head">
-            <span className="cfg-export-title">Export &mdash; {exportData.name}</span>
+            <span className="cfg-export-title">Export {exportData.name}</span>
             <button className="cfg-close" onClick={() => setExportData(null)} title="Close">&#10005;</button>
           </div>
           <textarea id="cfg-export-text" readOnly value={exportData.text} onFocus={(e) => e.currentTarget.select()} />

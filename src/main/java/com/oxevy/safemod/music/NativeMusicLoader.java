@@ -76,7 +76,7 @@ public final class NativeMusicLoader {
         try {
             if (loaded) {
                 if (isRunning()) return true;
-                // Native poller thread stopped unexpectedly — re-attach.
+                // Native poller thread stopped unexpectedly re-attach.
                 loaded = false;
             }
             // Bridge not attached yet (e.g. DBus not ready at JVM start, or the

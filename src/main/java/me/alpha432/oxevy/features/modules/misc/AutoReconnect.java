@@ -45,7 +45,7 @@ public class AutoReconnect extends Module {
             return;
         }
 
-        // Was connected, now disconnected — start reconnect timer
+        // Was connected, now disconnected start reconnect timer
         if (wasConnected && lastServer != null && !pendingReconnect) {
             if (attempts < maxAttempts.getValue()) {
                 pendingReconnect = true;

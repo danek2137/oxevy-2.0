@@ -168,7 +168,7 @@ function EnumSetting({ setting, onChange }) {
     const gap=4;
     const below=innerHeight-r.bottom-gap;
     const above=r.top-gap;
-    const up=below<120&&above>below;          // flip up when there is no room below
+    const up=below<120&&above>below; // flip up when there is no room below
     const next={
       left:Math.max(8,Math.min(r.left,innerWidth-r.width-8)),
       width:r.width,
@@ -290,17 +290,17 @@ const KEY_MAP = (() => {
     NumpadEnter: 335, NumpadDecimal: 330, NumpadDivide: 331, NumpadMultiply: 332,
     NumpadSubtract: 333, NumpadAdd: 334, NumpadEqual: 336
   };
-  for (let i = 0; i < 10; i++) m[String(i)] = 48 + i;                        // 0-9
-  for (let i = 0; i < 26; i++) m[String.fromCharCode(65 + i)] = 65 + i;      // A-Z
-  for (let i = 1; i <= 25; i++) m["F" + i] = 289 + i;                        // F1-F25
-  for (let i = 0; i < 10; i++) m["Numpad" + i] = 320 + i;                    // keypad 0-9
+  for (let i = 0; i < 10; i++) m[String(i)] = 48 + i; // 0-9
+  for (let i = 0; i < 26; i++) m[String.fromCharCode(65 + i)] = 65 + i; // A-Z
+  for (let i = 1; i <= 25; i++) m["F" + i] = 289 + i; // F1-F25
+  for (let i = 0; i < 10; i++) m["Numpad" + i] = 320 + i; // keypad 0-9
   return m;
 })();
 
 /** KeyboardEvent.code -> GLFW key code, for the "Press Key" capture mode. */
 function codeToGlfw(code) {
   if (!code) return null;
-  if (KEY_MAP[code] !== undefined) return KEY_MAP[code];   // Space, Numpad5, F5, ArrowLeft, ...
+  if (KEY_MAP[code] !== undefined) return KEY_MAP[code]; // Space, Numpad5, F5, ArrowLeft, ...
   if (code.length === 4 && code.startsWith("Key")) return code.charCodeAt(3);
   if (code.startsWith("Digit")) return 48 + Number(code.slice(5));
   return null;
@@ -355,7 +355,7 @@ function BindSetting({ setting, onChange }) {
     if (!capture) return;
     const h = e => {
       const k = codeToGlfw(e.code);
-      if (k == null) return;                 // unrecognised key: let it through
+      if (k == null) return; // unrecognised key: let it through
       e.preventDefault();
       setCapture(false);
       onChange({ key: k });
@@ -402,7 +402,7 @@ function BindSetting({ setting, onChange }) {
         <button className="btn" onClick={() => setCapture(!capture)}>{capture ? "Listening..." : "Press Key"}</button>
       </div>
 
-      {/* Virtual Keyboard Modal — portaled to <body>. Inside .setting, `contain:
+      {/* Virtual Keyboard Modal portaled to <body>. Inside .setting, `contain:
           paint` makes the row a containing block for fixed positioning, which
           squeezed this whole overlay down to the size of the bind row. */}
       {showKeyboard && ReactDOM.createPortal(
@@ -492,14 +492,14 @@ function SettingsPanel({ mod, onToggle, onSettingChange, onClose }) {
 // so the tabs speak the same visual language as the rest of the client. The
 // name is revealed in a tooltip to the right on hover/focus (see .tab-tip).
 const CAT_ICON={
-  COMBAT:"e",    // crossed swords
-  MISC:"c",      // three dots
-  RENDER:"f",    // eye
-  MOVEMENT:"d",  // running figure
-  PLAYER:"v",    // two people
-  CLIENT:"h",    // gear
-  HUD:"t",       // panel / window
-  CONFIGS:"s",   // save / floppy disk
+  COMBAT:"e", // crossed swords
+  MISC:"c", // three dots
+  RENDER:"f", // eye
+  MOVEMENT:"d", // running figure
+  PLAYER:"v", // two people
+  CLIENT:"h", // gear
+  HUD:"t", // panel / window
+  CONFIGS:"s", // save / floppy disk
 };
 
 // Theme catalogue is normally served by the bridge (config.themes), but an
@@ -550,10 +550,10 @@ const ThemePicker = memo(function ThemePicker({ themes, theme, onPick }) {
     if(!el)return;
     const r=el.getBoundingClientRect();
     const gap=4;
-    const width=Math.max(168,r.width);        // the button itself is only an icon wide
+    const width=Math.max(168,r.width); // the button itself is only an icon wide
     const below=innerHeight-r.bottom-gap;
     const above=r.top-gap;
-    const up=below<140&&above>below;          // flip up when there is no room below
+    const up=below<140&&above>below; // flip up when there is no room below
     const next={
       left:Math.max(8,Math.min(r.right-width,innerWidth-width-8)),
       width,

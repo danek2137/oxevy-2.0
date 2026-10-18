@@ -265,7 +265,7 @@ public class OxevySettingsScreen extends Screen {
             }
         }
 
-        // Setting clicks — iterate in render order, skip invisible settings
+        // Setting clicks iterate in render order, skip invisible settings
         if (selectedModule != null) {
             for (Setting<?> setting : selectedModule.getSettings()) {
                 if (setting.getName().equals("Enabled") || setting.getName().equals("DisplayName")) continue;
