@@ -2,13 +2,9 @@
  <img src="images/oxevy-watermark.png" alt="Oxevy logo" width="640" />
 </div>
 
-# Oxevy
-
 <div align="center">
 
 **THIS PROJECT IS IN BETA**
-
-**An AI-based utility client, OyVey-ported**
 
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -70,7 +66,7 @@ to each [release](https://github.com/danek2137/oxevy-2.0/releases).
  a single string, or export/import `.json` files. The same panel opens from
  the main menu and from the ClickGUI's *Configs* tab.
 - **Modules** combat, movement, render, HUD, misc and client modules with
- keybinds, friends and profiles (built on the OyVey base).
+ keybinds, friends and profiles.
 - **Cosmetics** capes, skins and head accessories, rendered on your player.
 
 ## Building (developers)
@@ -101,8 +97,8 @@ only it is *not* nested into the output jar).
 ![Old UI](images/ui1.png)
 ![New UI](images/ui2.png)
 
-# made by
+made by
 Built with: ChatGPT • DeepSeek • OpenCode • Gemini • Cursor
 ## License
-
 [MIT](LICENSE)
+### orginaly based on OyVey-ported
