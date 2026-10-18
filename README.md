@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="images/oxevy-logo.png" alt="Oxevy logo" width="480" />
+  <img src="images/oxevy-watermark.png" alt="Oxevy logo" width="640" />
 </div>
 
 # Oxevy
