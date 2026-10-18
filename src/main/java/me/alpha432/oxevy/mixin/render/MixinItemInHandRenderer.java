@@ -29,7 +29,7 @@ public abstract class MixinItemInHandRenderer {
                                      PoseStack matrices, SubmitNodeCollector submitNodeCollector,
                                      int light, CallbackInfo ci) {
 
-        // HandViewModule takes priority — position/rotation/scale per hand
+        // HandViewModule takes priority position/rotation/scale per hand
         HandViewModule handView = Oxevy.moduleManager.getModuleByClass(HandViewModule.class);
         if (handView != null && handView.isEnabled()) {
             if (hand == InteractionHand.OFF_HAND) {

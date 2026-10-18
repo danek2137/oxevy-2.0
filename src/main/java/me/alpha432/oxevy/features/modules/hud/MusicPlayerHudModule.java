@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * MusicPlayer HUD — compact TargetHUD-style card.
+ * MusicPlayer HUD compact TargetHUD-style card.
  * Real system media via MPRIS (playerctl on Linux, Windows Media Transport
  * Controls, AppleScript on macOS). Small rounded card: cover + title/artist,
  * progress bar with timestamps, and prev / play-pause / next controls.
@@ -54,7 +54,7 @@ public class MusicPlayerHudModule extends HudModule {
     private float btnNextX, btnNextY, btnNextW, btnNextH;
     private float lastCardX, lastCardY, lastCardW, lastCardH;
 
-    // ── visual constants — TargetHUD style ──────────────────────────
+    // ── visual constants TargetHUD style ──────────────────────────
     private static final float PAD = 8.0f;
     private static final float CARD_RADIUS = 8.0f;
     private static final float PROGRESS_H = 3.0f;
@@ -98,7 +98,7 @@ public class MusicPlayerHudModule extends HudModule {
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  LIFECYCLE
+    // LIFECYCLE
     // ════════════════════════════════════════════════════════════════════
 
     @Override
@@ -141,7 +141,7 @@ public class MusicPlayerHudModule extends HudModule {
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  MEDIA POLLING — client-side local system audio
+    // MEDIA POLLING client-side local system audio
     // ════════════════════════════════════════════════════════════════════
 
     private void updateTrack() {
@@ -323,7 +323,7 @@ public class MusicPlayerHudModule extends HudModule {
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  TRANSPORT CONTROLS — play/pause/next/prev via MPRIS
+    // TRANSPORT CONTROLS play/pause/next/prev via MPRIS
     // ════════════════════════════════════════════════════════════════════
 
     private void sendControlCommand(String... args) {
@@ -412,7 +412,7 @@ public class MusicPlayerHudModule extends HudModule {
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  CLICK HANDLING
+    // CLICK HANDLING
     // ════════════════════════════════════════════════════════════════════
 
     @Subscribe
@@ -465,7 +465,7 @@ public class MusicPlayerHudModule extends HudModule {
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  RENDERING — compact TargetHUD-style card
+    // RENDERING compact TargetHUD-style card
     // ════════════════════════════════════════════════════════════════════
 
     private int accent() {
@@ -614,43 +614,43 @@ public class MusicPlayerHudModule extends HudModule {
     private static final int ICON_SCALE = 2;
 
     private static final boolean[][] ICON_PREV = {
-        {true,  false, false, false, false, false, true},
-        {true,  true,  false, false, false, false, true},
-        {true,  true,  true,  false, false, false, true},
-        {true,  true,  true,  true,  false, false, true},
-        {true,  true,  true,  false, false, false, true},
-        {true,  true,  false, false, false, false, true},
-        {true,  false, false, false, false, false, true},
+        {true, false, false, false, false, false, true},
+        {true, true, false, false, false, false, true},
+        {true, true, true, false, false, false, true},
+        {true, true, true, true, false, false, true},
+        {true, true, true, false, false, false, true},
+        {true, true, false, false, false, false, true},
+        {true, false, false, false, false, false, true},
     };
 
     private static final boolean[][] ICON_NEXT = {
-        {true,  false, false, false, false, false, true},
-        {true,  false, false, false, false, true,  true},
-        {true,  false, false, false, true,  true,  true},
-        {true,  false, false, true,  true,  true,  true},
-        {true,  false, false, false, true,  true,  true},
-        {true,  false, false, false, false, true,  true},
-        {true,  false, false, false, false, false, true},
+        {true, false, false, false, false, false, true},
+        {true, false, false, false, false, true, true},
+        {true, false, false, false, true, true, true},
+        {true, false, false, true, true, true, true},
+        {true, false, false, false, true, true, true},
+        {true, false, false, false, false, true, true},
+        {true, false, false, false, false, false, true},
     };
 
     private static final boolean[][] ICON_PLAY = {
-        {false, false, false, false, false, true,  false},
-        {false, false, false, false, true,  true,  false},
-        {false, false, false, true,  true,  true,  false},
-        {false, false, true,  true,  true,  true,  false},
-        {false, false, false, true,  true,  true,  false},
-        {false, false, false, false, true,  true,  false},
-        {false, false, false, false, false, true,  false},
+        {false, false, false, false, false, true, false},
+        {false, false, false, false, true, true, false},
+        {false, false, false, true, true, true, false},
+        {false, false, true, true, true, true, false},
+        {false, false, false, true, true, true, false},
+        {false, false, false, false, true, true, false},
+        {false, false, false, false, false, true, false},
     };
 
     private static final boolean[][] ICON_PAUSE = {
-        {false, true,  true,  false, true,  true,  false},
-        {false, true,  true,  false, true,  true,  false},
-        {false, true,  true,  false, true,  true,  false},
-        {false, true,  true,  false, true,  true,  false},
-        {false, true,  true,  false, true,  true,  false},
-        {false, true,  true,  false, true,  true,  false},
-        {false, true,  true,  false, true,  true,  false},
+        {false, true, true, false, true, true, false},
+        {false, true, true, false, true, true, false},
+        {false, true, true, false, true, true, false},
+        {false, true, true, false, true, true, false},
+        {false, true, true, false, true, true, false},
+        {false, true, true, false, true, true, false},
+        {false, true, true, false, true, true, false},
     };
 
     private void drawPrevIcon(GuiGraphics ctx, float cx, float cy, int color) {
@@ -706,7 +706,7 @@ public class MusicPlayerHudModule extends HudModule {
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  PLAYERCTL RESOLUTION — flatpak/snap sandbox aware
+    // PLAYERCTL RESOLUTION flatpak/snap sandbox aware
     // ════════════════════════════════════════════════════════════════════
 
     private String resolvePlayerctl() {

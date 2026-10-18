@@ -25,9 +25,9 @@ public class ClickGuiScreen extends Screen {
     private static ClickGuiScreen INSTANCE;
 
     // ── Animation state ────────────────────────────────────────────
-    private float anim = 1f;          // 0 = fully closed, 1 = fully open
-    private boolean closing = false;  // true while the close animation plays
-    private long animStartNs = 0;     // when the current anim phase started
+    private float anim = 1f; // 0 = fully closed, 1 = fully open
+    private boolean closing = false; // true while the close animation plays
+    private long animStartNs = 0; // when the current anim phase started
 
     // ── State ──────────────────────────────────────────────────────
     private Category selCategory = Category.COMBAT;
@@ -45,17 +45,17 @@ public class ClickGuiScreen extends Screen {
     private Setting<Bind> listeningBindSetting = null;
 
     // ── Colors ─────────────────────────────────────────────────────
-    private static final int C_BG       = 0xFF0A0A12;
-    private static final int C_PANEL    = 0xFF12121E;
-    private static final int C_CARD     = 0xFF1A1A28;
+    private static final int C_BG = 0xFF0A0A12;
+    private static final int C_PANEL = 0xFF12121E;
+    private static final int C_CARD = 0xFF1A1A28;
     private static final int C_CARD_HVR = 0xFF222234;
-    private static final int C_INPUT    = 0xFF0E0E18;
-    private static final int C_ACCENT   = 0xFF00FF66;
-    private static final int C_ACCENT2  = 0xFF10B981;
-    private static final int C_TXT1     = 0xFFE2E8F0;
-    private static final int C_TXT2     = 0xFF94A3B8;
-    private static final int C_TXT3     = 0xFF475569;
-    private static final int C_SEP      = 0xFF1E1E2E;
+    private static final int C_INPUT = 0xFF0E0E18;
+    private static final int C_ACCENT = 0xFF00FF66;
+    private static final int C_ACCENT2 = 0xFF10B981;
+    private static final int C_TXT1 = 0xFFE2E8F0;
+    private static final int C_TXT2 = 0xFF94A3B8;
+    private static final int C_TXT3 = 0xFF475569;
+    private static final int C_SEP = 0xFF1E1E2E;
     private static final int C_TOGGLE_OFF = 0xFF2F2F38;
 
     // ── Layout ─────────────────────────────────────────────────────
@@ -85,14 +85,14 @@ public class ClickGuiScreen extends Screen {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  RENDER
+    // RENDER
     // ═══════════════════════════════════════════════════════════════
 
     @Override
     public void render(GuiGraphics ctx, int mx, int my, float delta) {
         updateAnimation();
 
-        // The close animation finished — actually leave the screen.
+        // The close animation finished actually leave the screen.
         if (closing && anim <= 0f) {
             closing = false;
             anim = 0f;
@@ -156,7 +156,7 @@ public class ClickGuiScreen extends Screen {
 
         // Deterministic time-based animation: advances linearly toward the
         // target and completes in exactly `animDuration()` seconds. Exponential
-        // decay was buggy — it never truly reaches the threshold, so the GUI
+        // decay was buggy it never truly reaches the threshold, so the GUI
         // lingered almost-invisible for seconds after closing.
         float duration = animDuration();
         float elapsed = (System.nanoTime() - animStartNs) / 1e9f;
@@ -349,7 +349,7 @@ public class ClickGuiScreen extends Screen {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  INPUT
+    // INPUT
     // ═══════════════════════════════════════════════════════════════
 
     @Override
@@ -580,7 +580,7 @@ public class ClickGuiScreen extends Screen {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  HELPERS
+    // HELPERS
     // ═══════════════════════════════════════════════════════════════
 
     private List<Module> getFilteredModules() {
@@ -615,16 +615,16 @@ public class ClickGuiScreen extends Screen {
     private SettingComponent createComponent(Setting<?> setting, int x, int y, int w) {
         int h = 16;
         Object val = setting.getValue();
-        if (val instanceof Boolean)   return new BooleanComponent((Setting<Boolean>) setting, x, y, w, h);
+        if (val instanceof Boolean) return new BooleanComponent((Setting<Boolean>) setting, x, y, w, h);
         if (val instanceof Number) {
             if (setting.getMin() != null) return new SliderComponent((Setting<Number>) setting, x, y, w, h);
             return new StringSettingComponent(setting, x, y, w, h);
         }
-        if (val instanceof Bind)      return new BindComponent((Setting<Bind>) setting, x, y, w, h);
-        if (val instanceof Color)     return new ColorComponent((Setting<Color>) setting, x, y, w, h);
-        if (setting.isEnumSetting())    return new EnumComponent(setting, x, y, w, h);
-        if (setting.isStringSetting())  return new StringComponent((Setting<String>) setting, x, y, w, h);
-        if (setting.isButtonSetting())  return new ButtonComponent((Setting<Runnable>) setting, x, y, w, h);
+        if (val instanceof Bind) return new BindComponent((Setting<Bind>) setting, x, y, w, h);
+        if (val instanceof Color) return new ColorComponent((Setting<Color>) setting, x, y, w, h);
+        if (setting.isEnumSetting()) return new EnumComponent(setting, x, y, w, h);
+        if (setting.isStringSetting()) return new StringComponent((Setting<String>) setting, x, y, w, h);
+        if (setting.isButtonSetting()) return new ButtonComponent((Setting<Runnable>) setting, x, y, w, h);
         return new StringSettingComponent(setting, x, y, w, h);
     }
 

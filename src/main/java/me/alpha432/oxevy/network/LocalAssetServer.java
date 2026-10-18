@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
  * Minimal static-file HTTP server bound to 127.0.0.1:8765 serving the game's
  * <gameDir>/oxevy folder. The launcher writes capes/skins there and the mod
  * references them as http://127.0.0.1:8765/... URLs, which the game's normal
- * texture downloader can fetch — no special texture registration needed.
+ * texture downloader can fetch no special texture registration needed.
  */
 public class LocalAssetServer {
     public static final int PORT = 8765;
