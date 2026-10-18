@@ -1,9 +1,9 @@
-# Oxevy — Minecraft 1.21.8
+# Oxevy Minecraft 1.21.8
 
 > ⚠️ **This is not the mainline branch.**
 >
 > This branch is a frozen snapshot that targets **Minecraft 1.21.8** only. It does
-> not receive new features or fixes — current development happens on
+> not receive new features or fixes current development happens on
 > [`main`](https://github.com/danek2137/oxevy-2.0) for **Minecraft 1.21.11**
 > (web UIs, MCEF integration and config share codes are 1.21.11-only).
 
@@ -13,7 +13,7 @@
 - Minecraft 1.21.8
 - Fabric Loader + Fabric API
 
-**MCEF is not required on this branch** — the MCEF/web-UI work lives on mainline.
+**MCEF is not required on this branch** the MCEF/web-UI work lives on mainline.
 
 ## Build
 
