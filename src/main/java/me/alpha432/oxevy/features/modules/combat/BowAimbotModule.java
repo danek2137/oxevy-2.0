@@ -152,6 +152,7 @@ public class BowAimbotModule extends Module {
 
     private boolean isValidTarget(Entity e) {
         if (e == mc.player || e.isRemoved()) return false;
+        if (me.alpha432.oxevy.util.entity.GhostPlayerEntity.isGhost(e)) return false;
         if (!(e instanceof LivingEntity living) || living.getHealth() <= 0) return false;
         double dist = mc.player.distanceTo(e);
         if (dist > range.getValue()) return false;

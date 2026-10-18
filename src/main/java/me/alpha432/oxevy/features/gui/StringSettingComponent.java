@@ -26,8 +26,10 @@ public class StringSettingComponent extends SettingComponent {
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         Color accent = ClickGuiModule.getInstance().color.getValue();
-        RenderUtil.roundRect(context, x, y, width, height, 10f, isHovered(mouseX, mouseY) ? 0x1AFFFFFF : 0x12FFFFFF);
-        context.drawString(CustomFont.font(), setting.getName(), x + 10, y + 8, 0xFFE6E6E6);
+        boolean hovered = isHovered(mouseX, mouseY);
+        RenderUtil.rect(context, x, y, x + width, y + height, hovered ? 0xFF1E1E30 : 0xFF1A1A28);
+        int textY = y + (height - 8) / 2;
+        context.drawString(CustomFont.font(), setting.getName(), x + 6, textY, 0xFFE6E6E6);
 
         String baseText = listening ? buffer : setting.getValueAsString();
         String cursor = listening && (System.currentTimeMillis() / 400L) % 2L == 0L ? "_" : "";
@@ -35,7 +37,7 @@ public class StringSettingComponent extends SettingComponent {
         int textColor = listening
                 ? new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 235).getRGB()
                 : 0xFFD4D4D8;
-        context.drawString(CustomFont.font(), valueText, x + width - 12 - CustomFont.font().width(valueText), y + 8, textColor);
+        context.drawString(CustomFont.font(), valueText, x + width - 6 - CustomFont.font().width(valueText), textY, textColor);
     }
 
     @Override

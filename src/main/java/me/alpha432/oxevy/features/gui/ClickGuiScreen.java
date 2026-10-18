@@ -20,10 +20,31 @@ import net.minecraft.network.chat.Component;
 
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Native ClickGui.
+ *
+ * <p>Performance notes (per-frame hot path):
+ * <ul>
+ *   <li>Colour interpolation runs through small precomputed LUTs instead of
+ *       six shift/mask ops + three lerps per module per frame.</li>
+ *   <li>Text metrics are memoised. {@code Font.width} walks the glyph list, so
+ *       measuring the same static labels (tabs, footer, hints) every frame was
+ *       pure waste.</li>
+ *   <li>Toggle-animation state lives in a primitive {@code float[]} indexed by a
+ *       dense module id, replacing a {@code HashMap<Module, Float>} that boxed a
+ *       Float on every read and write.</li>
+ *   <li>The settings list is rebuilt into a reused {@link ArrayList}, so the
+ *       render loop allocates nothing per frame.</li>
+ *   <li>Scroll extents are derived from the full content height in a separate
+ *       pass rather than from the last visible card, which used to under-report
+ *       and make the bottom of long lists unreachable.</li>
+ * </ul>
+ */
 public class ClickGuiScreen extends Screen {
 
     private static ClickGuiScreen INSTANCE;
@@ -32,6 +53,21 @@ public class ClickGuiScreen extends Screen {
     private float anim = 1f;          // 0 = fully closed, 1 = fully open
     private boolean closing = false;  // true while the close animation plays
     private long animStartNs = 0;     // when the current anim phase started
+
+    // ── Category-switch animation ──────────────────────────────────
+    private float catAnim = 1f;       // 0 = just switched, 1 = fully settled
+    private long catAnimStartNs = 0;
+    private Category prevCategory = null; // category we're sliding away from
+    private static final float CAT_ANIM_DURATION = 0.15f; // seconds
+
+    // ── Module switch animation state ──────────────────────────────
+    /** Current animation progress per module, indexed by {@link #indexOf(Module)}. */
+    private float[] toggleProgress = new float[128];
+    /** Dense module id assignment. */
+    private final Map<Module, Integer> moduleIndex = new HashMap<>();
+    /** Marks an unused slot; false progress so a stale 0f is never mistaken for "animated". */
+    private static final float TOGGLE_UNSET = -1f;
+    private long lastFrameNs = 0;
 
     // ── State ──────────────────────────────────────────────────────
     private Category selCategory = Category.COMBAT;
@@ -45,11 +81,33 @@ public class ClickGuiScreen extends Screen {
     private int settingsMaxScroll = 0;
 
     private final Map<Setting<?>, SettingComponent> settingComponents = new HashMap<>();
+    /** Reused buffer for the currently visible settings, so the render loop allocates nothing. */
+    private final List<Setting<?>> visibleSettings = new ArrayList<>();
     private Setting<String> focusedStringSetting = null;
     private Setting<Bind> listeningBindSetting = null;
 
-    private boolean destructArmed = false;
-    private long destructArmedAt = 0;
+    private List<Module> cachedFilteredModules = null;
+    private String lastFilterQuery = null;
+    private Category lastFilterCat = null;
+
+    private boolean destructHolding = false;
+    private long destructHoldStartNs = 0;
+
+    // ── Caches (text metrics) ──────────────────────────────────────
+    private static final int LUT_STEPS = 64;
+
+    private static int[] TAB_X;      // tab left edge, relative to the panel
+    private static int[] TAB_W;      // tab width
+    private static String FOOTER_TEXT;
+    private static String HINT_TEXT;
+    private static String CLOSE_TEXT;
+    private static String DESTRUCT_TEXT;
+    private static String DESTRUCT_HOLD_TEXT;
+    private static int FOOTER_W, HINT_W, CLOSE_W, DESTRUCT_W, DESTRUCT_HOLD_W;
+
+    private static final Map<String, Integer> WIDTH_CACHE = new HashMap<>();
+    private static final Map<Integer, String> BIND_LABEL_CACHE = new HashMap<>();
+    private static final int WIDTH_CACHE_CAP = 512;
 
     // ── Colors ─────────────────────────────────────────────────────
     private static final int C_BG       = 0xFF0A0A12;
@@ -58,6 +116,7 @@ public class ClickGuiScreen extends Screen {
     private static final int C_CARD_HVR = 0xFF222234;
     private static final int C_INPUT    = 0xFF0E0E18;
     private static final int C_ACCENT   = 0xFF00FF66;
+    private static final int C_ACCENT_RGB = C_ACCENT & 0x00FFFFFF;
     private static final int C_ACCENT2  = 0xFF10B981;
     private static final int C_TXT1     = 0xFFE2E8F0;
     private static final int C_TXT2     = 0xFF94A3B8;
@@ -68,8 +127,17 @@ public class ClickGuiScreen extends Screen {
     private static final int C_DESTRUCT_HVR   = 0xFF7A1414;
     private static final int C_DESTRUCT_ARMED = 0xFFE01414;
 
-    private static final long DESTRUCT_TIMEOUT_MS = 3000L;
-    private static final int DESTRUCT_BTN_H = 20;
+    private static final long DESTRUCT_HOLD_MS = 1500L;
+    private static final int SEARCH_W = 115;
+    private static final int DESTRUCT_BTN_W = 58;
+    private static final int DESTRUCT_BTN_H = 24;
+
+    // Interpolation LUTs. Declared after the colour constants above so their
+    // initialisers read initialised values (static init runs in textual order).
+    /** C_TXT2 -> C_TXT1, for the module name as a module turns on. */
+    private static final int[] NAME_COLOR_LUT = buildLut(C_TXT2, C_TXT1);
+    /** C_TOGGLE_OFF -> C_ACCENT, for the toggle pill background. */
+    private static final int[] PILL_COLOR_LUT = buildLut(C_TOGGLE_OFF, C_ACCENT);
 
     // ── Layout ─────────────────────────────────────────────────────
     private static final int GUI_W = 620;
@@ -79,11 +147,21 @@ public class ClickGuiScreen extends Screen {
     private static final int CARD_H = 32;
     private static final int CARD_GAP = 4;
     private static final int RIGHT_W = GUI_W - LEFT_W;
+    /** Module list viewport, relative to the list panel origin. */
+    private static final int LIST_PAD_TOP = 4;
+    private static final int LIST_PAD_BOTTOM = 22;
+
+    // ── Per-frame hoisted values (avoid repeated setting lookups) ──
+    private boolean animOn;
+    private boolean scaleAnim;
+    private boolean slideAnim;
+    private float toggleDuration = 0.12f;
 
     private final Minecraft mc = Minecraft.getInstance();
 
     private ClickGuiScreen() {
         super(Component.literal("Oxevy GUI"));
+        ensureStaticLabels();
     }
 
     // ── Singleton ──────────────────────────────────────────────────
@@ -94,6 +172,7 @@ public class ClickGuiScreen extends Screen {
         INSTANCE.closing = false;
         INSTANCE.anim = 0f;
         INSTANCE.animStartNs = System.nanoTime();
+        INSTANCE.lastFrameNs = System.nanoTime();
         return INSTANCE;
     }
 
@@ -103,6 +182,13 @@ public class ClickGuiScreen extends Screen {
 
     @Override
     public void render(GuiGraphics ctx, int mx, int my, float delta) {
+        long now = System.nanoTime();
+        float dt = lastFrameNs == 0 ? 0.016f : (float) ((now - lastFrameNs) / 1e9);
+        lastFrameNs = now;
+        dt = Math.min(dt, 0.1f);
+
+        refreshAnimConfig();
+
         updateAnimation();
 
         // The close animation finished — actually leave the screen.
@@ -121,11 +207,6 @@ public class ClickGuiScreen extends Screen {
         // backdrop (fades with the animation)
         int alpha = (int) (0xE6 * anim);
         ctx.fill(0, 0, guiW, guiH, (alpha << 24) | 0x050510);
-
-        ClickGuiModule cgm = ClickGuiModule.getInstance();
-        boolean scaleAnim = cgm.scaleAnimation.getValue();
-        boolean slideAnim = cgm.slideInAnimation.getValue();
-        boolean animOn = cgm.animationsEnabled.getValue();
 
         var pose = ctx.pose();
         pose.pushMatrix();
@@ -147,23 +228,67 @@ public class ClickGuiScreen extends Screen {
         }
 
         // main bg
-        RenderUtil.rect(ctx, guiX, guiY, guiX + GUI_W, guiY + GUI_H, C_BG);
+        ctx.fill(guiX, guiY, guiX + GUI_W, guiY + GUI_H, C_BG);
 
         drawTabs(ctx, guiX, guiY, mx, my);
-        drawModuleList(ctx, guiX, guiY + TAB_H, mx, my);
-        drawSettingsPanel(ctx, guiX + LEFT_W, guiY + TAB_H, mx, my);
-        drawFooter(ctx, guiX, guiY + GUI_H, mx, my);
+        drawModuleList(ctx, guiX, guiY + TAB_H, mx, my, dt);
+        drawSettingsPanel(ctx, guiX + LEFT_W, guiY + TAB_H, mx, my, dt);
+        drawFooter(ctx, guiX, guiY + GUI_H);
 
         pose.popMatrix();
 
         super.render(ctx, mx, my, delta);
     }
 
+    /** Reads the ClickGui settings once per frame instead of per draw call. */
+    private void refreshAnimConfig() {
+        ClickGuiModule cgm = ClickGuiModule.getInstance();
+        animOn = cgm.animationsEnabled.getValue();
+        scaleAnim = cgm.scaleAnimation.getValue();
+        slideAnim = cgm.slideInAnimation.getValue();
+
+        // animationSpeed was a per-frame lerp factor; convert it to a duration
+        // that stays snappy and can never drag on.
+        float speed = Math.max(cgm.animationSpeed.getValue(), 0.01f);
+        toggleDuration = Math.max(0.08f, Math.min(0.35f, 0.025f / speed));
+    }
+
+    /** Resolves a module to a dense index into {@link #toggleProgress}. */
+    private int indexOf(Module mod) {
+        Integer cached = moduleIndex.get(mod);
+        if (cached != null) return cached;
+        int idx = moduleIndex.size();
+        if (idx >= toggleProgress.length) {
+            toggleProgress = Arrays.copyOf(toggleProgress, Math.max(idx + 1, toggleProgress.length * 2));
+        }
+        toggleProgress[idx] = TOGGLE_UNSET;
+        moduleIndex.put(mod, idx);
+        return idx;
+    }
+
+    private float getToggleProgress(Module mod, float dt) {
+        int idx = indexOf(mod);
+        float target = mod.isEnabled() ? 1f : 0f;
+        float current = toggleProgress[idx];
+
+        if (current == TOGGLE_UNSET || !animOn) {
+            toggleProgress[idx] = target;
+            return target;
+        }
+        if (current != target) {
+            current = target > current
+                    ? Math.min(target, current + dt / toggleDuration)
+                    : Math.max(target, current - dt / toggleDuration);
+            toggleProgress[idx] = current;
+        }
+        return current;
+    }
+
     // ── Animation helpers ─────────────────────────────────────────
     private void updateAnimation() {
-        ClickGuiModule cgm = ClickGuiModule.getInstance();
-        if (!cgm.animationsEnabled.getValue()) {
+        if (!animOn) {
             anim = closing ? 0f : 1f;
+            catAnim = 1f;
             return;
         }
 
@@ -175,19 +300,18 @@ public class ClickGuiScreen extends Screen {
         float elapsed = (System.nanoTime() - animStartNs) / 1e9f;
         float t = Math.min(elapsed / duration, 1f);
 
-        if (closing) {
-            anim = 1f - t;
-        } else {
-            anim = t;
+        anim = closing ? 1f - t : t;
+
+        if (catAnim < 1f) {
+            float catDuration = Math.max(0.06f, Math.min(0.4f, 0.035f / Math.max(ClickGuiModule.getInstance().animationSpeed.getValue(), 0.01f)));
+            float catElapsed = (System.nanoTime() - catAnimStartNs) / 1e9f;
+            catAnim = Math.min(catElapsed / catDuration, 1f);
         }
     }
 
     private float animDuration() {
-        ClickGuiModule cgm = ClickGuiModule.getInstance();
-        // animationSpeed (default 0.15) was a per-frame lerp factor; convert it
-        // to a duration that stays snappy. Clamped so it can never drag on.
-        float speed = Math.max(cgm.animationSpeed.getValue(), 0.01f);
-        return Math.max(0.06f, Math.min(0.9f, 0.09f / speed));
+        // Clamped so it can never drag on.
+        return Math.max(0.06f, Math.min(0.9f, 0.09f / Math.max(ClickGuiModule.getInstance().animationSpeed.getValue(), 0.01f)));
     }
 
     private static float easeOutCubic(float t) {
@@ -197,150 +321,197 @@ public class ClickGuiScreen extends Screen {
 
     // ── Tabs ───────────────────────────────────────────────────────
     private void drawTabs(GuiGraphics ctx, int gx, int gy, int mx, int my) {
-        RenderUtil.rect(ctx, gx, gy, gx + GUI_W, gy + TAB_H, C_PANEL);
+        ctx.fill(gx, gy, gx + GUI_W, gy + TAB_H, C_PANEL);
 
-        int tx = gx + 8;
-        for (Category cat : Category.values()) {
-            int tw = CustomFont.font().width(cat.getName()) + 16;
-            boolean hover = mx >= tx && mx < tx + tw && my >= gy && my < gy + TAB_H;
-            boolean active = cat == selCategory;
+        Category[] cats = Category.values();
+        int tabTop = gy;
+        int tabBottom = gy + TAB_H;
 
-            if (active) {
-                RenderUtil.rect(ctx, tx, gy + TAB_H - 3, tx + tw, gy + TAB_H, C_ACCENT);
-            } else if (hover) {
-                RenderUtil.rect(ctx, tx, gy + TAB_H - 3, tx + tw, gy + TAB_H, 0x4000FF66);
+        for (int i = 0; i < cats.length; i++) {
+            Category cat = cats[i];
+            int tx = gx + TAB_X[i];
+            int tw = TAB_W[i];
+            boolean hover = mx >= tx && mx < tx + tw && my >= tabTop && my < tabBottom;
+            boolean active = i == selCategory.ordinal();
+
+            if (hover && !active) {
+                ctx.fill(tx, tabBottom - 3, tx + tw, tabBottom, 0x4000FF66);
             }
 
             int textColor = active ? C_ACCENT : (hover ? C_TXT1 : C_TXT2);
             ctx.drawString(CustomFont.font(), cat.getName(), tx + 8, gy + (TAB_H - 8) / 2, textColor);
-            tx += tw + 4;
         }
 
-        // search
-        int sw = 130;
-        int sx = gx + GUI_W - sw - 8;
-        RenderUtil.rect(ctx, sx, gy + 6, sx + sw, gy + TAB_H - 6, C_INPUT);
-        String prompt = searchText.isEmpty() && !searchFocused ? "Search..." : searchText;
-        int promptColor = searchText.isEmpty() && !searchFocused ? C_TXT3 : C_TXT1;
-        ctx.drawString(CustomFont.font(), prompt, sx + 6, gy + (TAB_H - 8) / 2, promptColor);
+        // Active indicator line with smooth sliding animation
+        int targetX = gx + TAB_X[selCategory.ordinal()];
+        int targetW = TAB_W[selCategory.ordinal()];
+        if (animOn && prevCategory != null && catAnim < 1f) {
+            float eased = easeOutCubic(catAnim);
+            int prevX = gx + TAB_X[prevCategory.ordinal()];
+            int prevW = TAB_W[prevCategory.ordinal()];
+
+            float curX = prevX + (targetX - prevX) * eased;
+            float curW = prevW + (targetW - prevW) * eased;
+            RenderUtil.rect(ctx, curX, gy + TAB_H - 3, curX + curW, gy + TAB_H, C_ACCENT);
+        } else {
+            ctx.fill(targetX, gy + TAB_H - 3, targetX + targetW, gy + TAB_H, C_ACCENT);
+        }
+
+        // Destruct button (small, placed right after search on top bar)
+        int dx = gx + GUI_W - DESTRUCT_BTN_W - 8;
+        int dy = gy + 6;
+        drawDestructButton(ctx, dx, dy, mx, my);
+
+        // search (to the left of destruct)
+        int sx = dx - SEARCH_W - 6;
+        ctx.fill(sx, gy + 6, sx + SEARCH_W, gy + TAB_H - 6, C_INPUT);
+        boolean emptyPrompt = searchText.isEmpty() && !searchFocused;
+        ctx.drawString(CustomFont.font(), emptyPrompt ? HINT_TEXT : searchText,
+                sx + 6, gy + (TAB_H - 8) / 2, emptyPrompt ? C_TXT3 : C_TXT1);
 
         if (searchFocused) {
-            int cursorW = CustomFont.font().width(searchText);
-            long blink = System.currentTimeMillis() / 500;
-            if (blink % 2 == 0) {
-                ctx.fill(sx + 6 + cursorW + 1, gy + 10, sx + 7 + cursorW + 1, gy + 10 + 10, C_ACCENT);
+            int cursorW = textWidth(searchText);
+            if ((System.currentTimeMillis() / 500) % 2 == 0) {
+                ctx.fill(sx + 7 + cursorW, gy + 10, sx + 8 + cursorW, gy + 20, C_ACCENT);
             }
         }
     }
 
     // ── Module List ────────────────────────────────────────────────
-    private void drawModuleList(GuiGraphics ctx, int gx, int gy, int mx, int my) {
+    private void drawModuleList(GuiGraphics ctx, int gx, int gy, int mx, int my, float dt) {
         int listTop = gy;
         int listBottom = gy + GUI_H - TAB_H;
         int listLeft = gx;
         int listRight = gx + LEFT_W;
 
-        // panel bg
-        RenderUtil.rect(ctx, listLeft, listTop, listRight, listBottom, C_PANEL);
-        // separator
-        RenderUtil.rect(ctx, listRight - 1, listTop, listRight, listBottom, C_SEP);
+        // panel bg + separator
+        ctx.fill(listLeft, listTop, listRight, listBottom, C_PANEL);
+        ctx.fill(listRight - 1, listTop, listRight, listBottom, C_SEP);
 
         List<Module> mods = getFilteredModules();
-        int contentBottom = listBottom - DESTRUCT_BTN_H - 20;
+        int cardsTop = listTop + LIST_PAD_TOP;
+        int contentBottom = listBottom - LIST_PAD_BOTTOM;
+        int visibleH = contentBottom - cardsTop;
+
+        // Full content extent, independent of what is actually on screen.
+        int totalH = mods.isEmpty() ? 0 : mods.size() * (CARD_H + CARD_GAP) - CARD_GAP;
+        maxScroll = Math.max(0, totalH - visibleH);
+
+        int cardLeft = listLeft + 4;
+        int cardW = LEFT_W - 8;
+        int cardRight = cardLeft + cardW;
+
         ctx.enableScissor(listLeft, listTop, listRight, contentBottom);
 
-        int yOff = listTop + 4 - scrollOffset;
-        int cardW = LEFT_W - 8;
+        var pose = ctx.pose();
+        pose.pushMatrix();
+
+        float slideX = 0f;
+        if (animOn && catAnim < 1f) {
+            float eased = easeOutCubic(catAnim);
+            int dir = (prevCategory != null) ? Integer.compare(selCategory.ordinal(), prevCategory.ordinal()) : 1;
+            if (dir == 0) dir = 1;
+            slideX = (1f - eased) * 24f * dir;
+            pose.translate(slideX, 0f);
+        }
+        int effMx = (int) (mx - slideX);
+
+        int yOff = cardsTop - scrollOffset;
 
         for (int i = 0; i < mods.size(); i++) {
             Module mod = mods.get(i);
             if (yOff + CARD_H < listTop) { yOff += CARD_H + CARD_GAP; continue; }
             if (yOff > contentBottom) break;
 
-            boolean hover = mx >= listLeft + 4 && mx < listLeft + 4 + cardW
-                    && my >= yOff && my < yOff + CARD_H;
-            boolean selected = mod == selModule;
+            boolean hover = effMx >= cardLeft && effMx < cardRight
+                    && my >= yOff && my < yOff + CARD_H
+                    && my >= listTop && my < contentBottom;
 
-            // card bg
-            int cardBg = selected ? C_CARD_HVR : (hover ? 0xFF1E1E30 : C_CARD);
-            RenderUtil.rect(ctx, listLeft + 4, yOff, listLeft + 4 + cardW, yOff + CARD_H, cardBg);
+            ctx.fill(cardLeft, yOff, cardRight, yOff + CARD_H,
+                    (hover || mod == selModule) ? C_CARD_HVR : C_CARD);
 
-            // accent bar when enabled
-            if (mod.isEnabled()) {
-                ctx.fill(listLeft + 4, yOff, listLeft + 7, yOff + CARD_H, C_ACCENT);
+            float switchProgress = getToggleProgress(mod, dt);
+            float p = switchProgress * switchProgress * (3f - 2f * switchProgress);
+            int lut = lutIndex(p);
+
+            // accent bar when enabled (fades in/out smoothly)
+            if (p > 0.01f) {
+                ctx.fill(cardLeft, yOff, cardLeft + 3, yOff + CARD_H,
+                        ((int) (p * 255) << 24) | C_ACCENT_RGB);
             }
 
-            // name
-            int nameColor = mod.isEnabled() ? C_TXT1 : C_TXT2;
-            ctx.drawString(CustomFont.font(), mod.getDisplayName(), listLeft + 14, yOff + (CARD_H - 8) / 2, nameColor);
+            // name color smoothly blends from C_TXT2 to C_TXT1
+            ctx.drawString(CustomFont.font(), mod.getDisplayName(),
+                    cardLeft + 10, yOff + (CARD_H - 8) / 2, NAME_COLOR_LUT[lut]);
 
             // bind badge
             Bind bind = mod.getBind();
             if (!bind.isEmpty()) {
-                String bindStr = KeyboardUtil.getKeyName(bind.getKey());
-                int bw = CustomFont.font().width(bindStr) + 8;
-                int bx = listLeft + 4 + cardW - bw - 34;
-                RenderUtil.rect(ctx, bx, yOff + 9, bx + bw, yOff + CARD_H - 9, C_BG);
+                String bindStr = bindLabel(bind.getKey());
+                int bw = textWidth(bindStr) + 8;
+                int bx = cardRight - bw - 34;
+                ctx.fill(bx, yOff + 9, bx + bw, yOff + CARD_H - 9, C_BG);
                 ctx.drawString(CustomFont.font(), bindStr, bx + 4, yOff + (CARD_H - 8) / 2, C_ACCENT2);
             }
 
-            // toggle pill
-            int px = listLeft + 4 + cardW - 30;
+            // toggle pill with animated sliding knob and smooth background transition
+            int px = cardRight - 30;
             int py = yOff + (CARD_H - 14) / 2;
-            int pillBg = mod.isEnabled() ? C_ACCENT : C_TOGGLE_OFF;
-            RenderUtil.rect(ctx, px, py, px + 26, py + 14, pillBg);
-            int knobX = mod.isEnabled() ? px + 14 : px + 2;
-            RenderUtil.rect(ctx, knobX, py + 2, knobX + 10, py + 12, C_TXT1);
+            ctx.fill(px, py, px + 26, py + 14, PILL_COLOR_LUT[lut]);
+            ctx.fill(px + 2 + (int) (12f * p), py + 2, px + 12 + (int) (12f * p), py + 12, C_TXT1);
 
             yOff += CARD_H + CARD_GAP;
         }
 
-        maxScroll = Math.max(0, yOff - contentBottom + scrollOffset);
+        pose.popMatrix();
         ctx.disableScissor();
-
-        drawDestructButton(ctx, gx, listBottom, mx, my);
     }
 
     // ── Destruct Button ───────────────────────────────────────────
-    private void drawDestructButton(GuiGraphics ctx, int gx, int listBottom, int mx, int my) {
-        if (destructArmed && System.currentTimeMillis() - destructArmedAt > DESTRUCT_TIMEOUT_MS) {
-            destructArmed = false;
+    private void drawDestructButton(GuiGraphics ctx, int dx, int dy, int mx, int my) {
+        boolean hover = mx >= dx && mx < dx + DESTRUCT_BTN_W && my >= dy && my < dy + DESTRUCT_BTN_H;
+
+        if (destructHolding) {
+            if (!hover) {
+                destructHolding = false;
+            } else if (System.nanoTime() - destructHoldStartNs >= DESTRUCT_HOLD_MS * 1_000_000L) {
+                destructHolding = false;
+                DestructCommand.destruct();
+            }
         }
 
-        int btnX = gx + 8;
-        int btnY = listBottom - DESTRUCT_BTN_H - 18;
-        int btnW = LEFT_W - 16;
-        boolean hover = mx >= btnX && mx < btnX + btnW && my >= btnY && my < btnY + DESTRUCT_BTN_H;
+        ctx.fill(dx, dy, dx + DESTRUCT_BTN_W, dy + DESTRUCT_BTN_H, hover ? C_DESTRUCT_HVR : C_DESTRUCT);
 
-        int bg;
-        if (destructArmed) {
-            int pulse = (int) (0x7F - 0x60 * (0.5f + 0.5f * Math.sin(System.currentTimeMillis() / 150.0)));
-            bg = (pulse << 24) | (C_DESTRUCT_ARMED & 0x00FFFFFF);
-        } else if (hover) {
-            bg = C_DESTRUCT_HVR;
+        String label;
+        int labelW;
+        int txt;
+        if (destructHolding) {
+            float progress = (float) (System.nanoTime() - destructHoldStartNs) / (DESTRUCT_HOLD_MS * 1_000_000f);
+            int fillW = (int) (DESTRUCT_BTN_W * Math.min(1f, progress));
+            if (fillW > 0) {
+                ctx.fill(dx, dy, dx + fillW, dy + DESTRUCT_BTN_H, C_DESTRUCT_ARMED);
+            }
+            label = DESTRUCT_HOLD_TEXT;
+            labelW = DESTRUCT_HOLD_W;
+            txt = 0xFFFFFFFF;
         } else {
-            bg = C_DESTRUCT;
+            label = DESTRUCT_TEXT;
+            labelW = DESTRUCT_W;
+            txt = 0xFFF0B0B0;
         }
-        RenderUtil.rect(ctx, btnX, btnY, btnX + btnW, btnY + DESTRUCT_BTN_H, bg);
-
-        String label = destructArmed ? "CONFIRM DESTRUCT" : "DESTRUCT CLIENT";
-        int txt = destructArmed ? 0xFFFFFFFF : 0xFFF0B0B0;
-        ctx.drawString(CustomFont.font(), label,
-                btnX + (btnW - CustomFont.font().width(label)) / 2,
-                btnY + (DESTRUCT_BTN_H - 8) / 2, txt);
+        ctx.drawString(CustomFont.font(), label, dx + (DESTRUCT_BTN_W - labelW) / 2, dy + (DESTRUCT_BTN_H - 8) / 2, txt);
     }
 
     // ── Settings Panel ─────────────────────────────────────────────
-    private void drawSettingsPanel(GuiGraphics ctx, int px, int py, int mx, int my) {
+    private void drawSettingsPanel(GuiGraphics ctx, int px, int py, int mx, int my, float dt) {
         int pRight = px + RIGHT_W;
         int pBottom = py + GUI_H - TAB_H;
 
-        RenderUtil.rect(ctx, px, py, pRight, pBottom, C_PANEL);
+        ctx.fill(px, py, pRight, pBottom, C_PANEL);
 
         if (selModule == null) {
-            String hint = "Right-click a module to edit settings";
-            ctx.drawString(CustomFont.font(), hint,
-                    px + (RIGHT_W - CustomFont.font().width(hint)) / 2,
+            ctx.drawString(CustomFont.font(), HINT_TEXT,
+                    px + (RIGHT_W - HINT_W) / 2,
                     py + (GUI_H - TAB_H - 8) / 2,
                     C_TXT3);
             return;
@@ -348,49 +519,72 @@ public class ClickGuiScreen extends Screen {
 
         // header
         ctx.drawString(CustomFont.font(), selModule.getDisplayName(), px + 12, py + 10, C_TXT1);
-        RenderUtil.rect(ctx, px + 8, py + 24, pRight - 8, py + 25, C_SEP);
+        ctx.fill(px + 8, py + 24, pRight - 8, py + 25, C_SEP);
 
         // close hint
-        String closeText = "[ESC]";
-        ctx.drawString(CustomFont.font(), closeText, pRight - 8 - CustomFont.font().width(closeText), py + 10, C_TXT3);
+        ctx.drawString(CustomFont.font(), CLOSE_TEXT, pRight - 8 - CLOSE_W, py + 10, C_TXT3);
+
+        // module enable/disable switch (matches the module list pill)
+        int swW = 26;
+        int swH = 14;
+        int swX = pRight - 8 - CLOSE_W - 6 - swW;
+        int swY = py + (24 - swH) / 2;
+        boolean swHover = mx >= swX && mx < swX + swW && my >= swY && my < swY + swH;
+        float p = getToggleProgress(selModule, dt);
+        int lut = lutIndex(p);
+        ctx.fill(swX, swY, swX + swW, swY + swH, (swHover ? 0x22FFFFFF : 0) | PILL_COLOR_LUT[lut]);
+        ctx.fill(swX + 2 + (int) (12f * p), swY + 2, swX + 12 + (int) (12f * p), swY + 12, C_TXT1);
 
         // settings list
         int listTop = py + 32;
         int listBottom = pBottom - 4;
-        ctx.enableScissor(px, listTop, pRight, listBottom);
-
-        List<Setting<?>> settings = new ArrayList<>();
-        for (Setting<?> s : selModule.getSettings()) {
-            if (!"Enabled".equals(s.getName()) && !"DisplayName".equals(s.getName()) && s.isVisible()) {
-                settings.add(s);
-            }
-        }
-
-        int sy = listTop + 2 - settingsScroll;
+        int compX = px + 12;
         int compW = RIGHT_W - 24;
+        int firstY = listTop + 2 - settingsScroll;
 
-        for (Setting<?> setting : settings) {
-            SettingComponent comp = getOrCreateComponent(setting, px + 12, sy, compW);
-            int h = comp.getHeight() + 4;
-            if (sy + h < listTop) { sy += h; continue; }
-            if (sy > listBottom) break;
+        List<Setting<?>> settings = collectVisibleSettings(selModule);
 
-            comp.render(ctx, mx, my, 0);
-            sy += h;
+        // Pass 1: position every component and accumulate the full content
+        // height, so the scroll extent does not depend on the visible window.
+        int totalH = 0;
+        for (int i = 0; i < settings.size(); i++) {
+            SettingComponent comp = getOrCreateComponent(settings.get(i), compX, firstY + totalH, compW);
+            totalH += comp.getHeight() + 4;
         }
+        settingsMaxScroll = Math.max(0, totalH - (listBottom - firstY) + 8);
 
-        settingsMaxScroll = Math.max(0, sy - listBottom + settingsScroll + 8);
+        // Pass 2: draw the ones actually in view.
+        ctx.enableScissor(px, listTop, pRight, listBottom);
+        for (int i = 0; i < settings.size(); i++) {
+            SettingComponent comp = settingComponents.get(settings.get(i));
+            if (comp.y + comp.getHeight() + 4 < listTop) continue;
+            if (comp.y > listBottom) break;
+            comp.render(ctx, mx, my, 0);
+        }
         ctx.disableScissor();
     }
 
+    /**
+     * Fills {@link #visibleSettings} with the settings of {@code mod} that are
+     * worth showing. Reuses the buffer so the render loop stays allocation-free;
+     * rebuilding each frame (rather than caching) keeps conditional visibility
+     * correct the instant a setting is toggled.
+     */
+    private List<Setting<?>> collectVisibleSettings(Module mod) {
+        visibleSettings.clear();
+        for (Setting<?> s : mod.getSettings()) {
+            if (s.isVisible() && !"Enabled".equals(s.getName()) && !"DisplayName".equals(s.getName())) {
+                visibleSettings.add(s);
+            }
+        }
+        return visibleSettings;
+    }
+
     // ── Footer ─────────────────────────────────────────────────────
-    private void drawFooter(GuiGraphics ctx, int gx, int gyBottom, int mx, int my) {
-        String footer = "LMB: Toggle | RMB: Settings | Scroll: Navigate | ESC: Close";
+    private void drawFooter(GuiGraphics ctx, int gx, int gyBottom) {
         int fy = gyBottom - 18;
-        RenderUtil.rect(ctx, gx, fy, gx + GUI_W, gyBottom, C_PANEL);
-        ctx.drawString(CustomFont.font(), footer,
-                gx + (GUI_W - CustomFont.font().width(footer)) / 2,
-                fy + 5, C_TXT3);
+        ctx.fill(gx, fy, gx + GUI_W, gyBottom, C_PANEL);
+        ctx.drawString(CustomFont.font(), FOOTER_TEXT, gx + (GUI_W - FOOTER_W) / 2, fy + 5, C_TXT3);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -411,32 +605,46 @@ public class ClickGuiScreen extends Screen {
         listeningBindSetting = null;
         for (SettingComponent c : settingComponents.values()) {
             if (c instanceof BindComponent bc) bc.stopListening();
+            if (c instanceof DropdownComponent dc && !dc.isHovered(mx, my)) dc.close();
         }
 
         // tab clicks
         if (my >= guiY && my < guiY + TAB_H) {
-            destructArmed = false;
-            int tx = guiX + 8;
-            for (Category cat : Category.values()) {
-                int tw = CustomFont.font().width(cat.getName()) + 16;
-                if (mx >= tx && mx < tx + tw) {
-                    selCategory = cat;
-                    selModule = null;
-                    scrollOffset = 0;
-                    settingsScroll = 0;
-                    settingComponents.clear();
-                    return true;
-                }
-                tx += tw + 4;
+            destructHolding = false;
+
+            // destruct click (top bar, right of search)
+            int dx = guiX + GUI_W - DESTRUCT_BTN_W - 8;
+            int dy = guiY + 6;
+            if (mx >= dx && mx < dx + DESTRUCT_BTN_W && my >= dy && my < dy + DESTRUCT_BTN_H) {
+                if (btn == 0) handleDestructClick();
+                return true;
             }
+
             // search click
-            int sw = 130;
-            int sx = guiX + GUI_W - sw - 8;
-            if (mx >= sx && mx < sx + sw && my >= guiY && my < guiY + TAB_H) {
+            int sx = dx - SEARCH_W - 6;
+            if (mx >= sx && mx < sx + SEARCH_W && my >= dy && my < dy + DESTRUCT_BTN_H) {
                 searchFocused = true;
                 return true;
             }
             searchFocused = false;
+
+            for (int i = 0; i < TAB_X.length; i++) {
+                int tx = guiX + TAB_X[i];
+                if (mx >= tx && mx < tx + TAB_W[i]) {
+                    Category cat = Category.values()[i];
+                    if (selCategory != cat) {
+                        prevCategory = selCategory;
+                        selCategory = cat;
+                        selModule = null;
+                        scrollOffset = 0;
+                        settingsScroll = 0;
+                        settingComponents.clear();
+                        catAnim = 0f;
+                        catAnimStartNs = System.nanoTime();
+                    }
+                    return true;
+                }
+            }
             return true;
         }
 
@@ -445,40 +653,34 @@ public class ClickGuiScreen extends Screen {
         int listLeft = guiX;
         int listRight = guiX + LEFT_W;
 
-        // destruct button click
-        if (mx >= listLeft && mx < listRight && my >= listBottom - DESTRUCT_BTN_H - 18 && my < listBottom - 18) {
-            if (btn == 0) handleDestructClick();
-            return true;
-        }
-
         // module list clicks
-        if (mx >= listLeft && mx < listRight && my >= listTop && my < listBottom - DESTRUCT_BTN_H - 20) {
+        if (mx >= listLeft && mx < listRight && my >= listTop && my < listBottom - LIST_PAD_BOTTOM) {
             searchFocused = false;
-            destructArmed = false;
+            destructHolding = false;
             List<Module> mods = getFilteredModules();
-            int yOff = listTop + 4 - scrollOffset;
             int cardW = LEFT_W - 8;
+            int cardLeft = listLeft + 4;
+            int cardRight = cardLeft + cardW;
+            int toggleLeft = cardRight - 30;
+            int yOff = listTop + LIST_PAD_TOP - scrollOffset;
+
+            float slideX = 0f;
+            if (animOn && catAnim < 1f) {
+                float eased = easeOutCubic(catAnim);
+                int dir = (prevCategory != null) ? Integer.compare(selCategory.ordinal(), prevCategory.ordinal()) : 1;
+                if (dir == 0) dir = 1;
+                slideX = (1f - eased) * 24f * dir;
+            }
+            int effMx = (int) (mx - slideX);
 
             for (Module mod : mods) {
-                if (my >= yOff && my < yOff + CARD_H && mx >= listLeft + 4 && mx < listLeft + 4 + cardW) {
-                    int px = listLeft + 4 + cardW - 30;
-                    if (btn == 0 && mx >= px && mx < px + 26) {
+                if (my >= yOff && my < yOff + CARD_H && effMx >= cardLeft && effMx < cardRight) {
+                    if (btn == 0 && effMx >= toggleLeft && effMx < toggleLeft + 26) {
                         mod.toggle();
                         return true;
                     }
-                    if (btn == 1) {
-                        if (selModule == mod) {
-                            selModule = null;
-                            settingComponents.clear();
-                        } else {
-                            selModule = mod;
-                            settingComponents.clear();
-                            settingsScroll = 0;
-                        }
-                        return true;
-                    }
-                    if (btn == 0) {
-                        mod.toggle();
+                    if (btn == 1 || btn == 0) {
+                        selectModule(selModule == mod ? null : mod);
                         return true;
                     }
                 }
@@ -490,25 +692,32 @@ public class ClickGuiScreen extends Screen {
         // settings panel clicks
         int settingsLeft = guiX + LEFT_W;
         int settingsRight = guiX + GUI_W;
-        if (mx >= settingsLeft && mx < settingsRight && my >= listTop && my < listBottom - 22) {
+        if (mx >= settingsLeft && mx < settingsRight && my >= listTop && my < listBottom - LIST_PAD_BOTTOM) {
             if (selModule == null) return true;
 
+            // module enable/disable switch (header, left of [ESC])
+            int swW = 26;
+            int swH = 14;
+            int swX = settingsRight - 8 - CLOSE_W - 6 - swW;
+            int swY = listTop + (24 - swH) / 2;
+            if (mx >= swX && mx < swX + swW && my >= swY && my < swY + swH) {
+                selModule.toggle();
+                return true;
+            }
+
             // check close button
-            String closeText = "[ESC]";
-            int closeX = settingsRight - 8 - CustomFont.font().width(closeText);
-            if (mx >= closeX && mx < closeX + CustomFont.font().width(closeText) && my >= guiY + 8 && my < guiY + 22) {
-                selModule = null;
-                settingComponents.clear();
+            int closeX = settingsRight - 8 - CLOSE_W;
+            if (mx >= closeX && mx < closeX + CLOSE_W && my >= listTop + 4 && my < listTop + 22) {
+                selectModule(null);
                 return true;
             }
 
             int compTop = listTop + 32;
-            int compBottom = listBottom - 22;
+            int compBottom = listBottom - LIST_PAD_BOTTOM;
             int compW = RIGHT_W - 24;
             int sy = compTop + 2 - settingsScroll;
 
-            for (Setting<?> setting : selModule.getSettings()) {
-                if ("Enabled".equals(setting.getName()) || "DisplayName".equals(setting.getName()) || !setting.isVisible()) continue;
+            for (Setting<?> setting : collectVisibleSettings(selModule)) {
                 SettingComponent comp = getOrCreateComponent(setting, settingsLeft + 12, sy, compW);
                 int h = comp.getHeight() + 4;
                 if (sy + h < compTop) { sy += h; continue; }
@@ -532,14 +741,19 @@ public class ClickGuiScreen extends Screen {
         return super.mouseClicked(click, doubled);
     }
 
+    /** Selecting/deselecting a module resets its panel scroll and editor state. */
+    private void selectModule(Module mod) {
+        selModule = mod;
+        settingComponents.clear();
+        focusedStringSetting = null;
+        listeningBindSetting = null;
+        settingsScroll = 0;
+    }
+
     private void handleDestructClick() {
-        if (!destructArmed) {
-            destructArmed = true;
-            destructArmedAt = System.currentTimeMillis();
-            return;
-        }
-        destructArmed = false;
-        DestructCommand.destruct();
+        if (destructHolding) return;
+        destructHolding = true;
+        destructHoldStartNs = System.nanoTime();
     }
 
     @Override
@@ -547,6 +761,7 @@ public class ClickGuiScreen extends Screen {
         double mouseX = click.x();
         double mouseY = click.y();
         int button = click.button();
+        destructHolding = false;
         for (SettingComponent comp : settingComponents.values()) {
             comp.mouseReleased(mouseX, mouseY, button);
         }
@@ -559,18 +774,22 @@ public class ClickGuiScreen extends Screen {
         int guiY = (mc.getWindow().getGuiScaledHeight() - GUI_H) / 2;
 
         // settings panel scroll
-        if (mx >= guiX + LEFT_W && mx < guiX + GUI_W && my >= guiY + TAB_H && my < guiY + GUI_H - 22) {
-            settingsScroll = (int) Math.max(0, settingsScroll - vertical * 16);
-            settingsScroll = Math.min(settingsScroll, settingsMaxScroll);
+        if (mx >= guiX + LEFT_W && mx < guiX + GUI_W && my >= guiY + TAB_H && my < guiY + GUI_H - LIST_PAD_BOTTOM) {
+            settingsScroll = clampScroll(settingsScroll - vertical * 16, settingsMaxScroll);
             return true;
         }
         // module list scroll
-        if (mx >= guiX && mx < guiX + LEFT_W && my >= guiY + TAB_H && my < guiY + GUI_H - DESTRUCT_BTN_H - 20) {
-            scrollOffset = (int) Math.max(0, scrollOffset - vertical * 16);
-            scrollOffset = Math.min(scrollOffset, maxScroll);
+        if (mx >= guiX && mx < guiX + LEFT_W && my >= guiY + TAB_H && my < guiY + GUI_H - LIST_PAD_BOTTOM) {
+            scrollOffset = clampScroll(scrollOffset - vertical * 16, maxScroll);
             return true;
         }
         return super.mouseScrolled(mx, my, horizontal, vertical);
+    }
+
+    private static int clampScroll(double value, int max) {
+        if (value <= 0) return 0;
+        int v = (int) value;
+        return Math.min(v, max);
     }
 
     @Override
@@ -615,8 +834,7 @@ public class ClickGuiScreen extends Screen {
 
         if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
             if (selModule != null) {
-                selModule = null;
-                settingComponents.clear();
+                selectModule(null);
             } else {
                 onClose();
             }
@@ -651,18 +869,24 @@ public class ClickGuiScreen extends Screen {
     // ═══════════════════════════════════════════════════════════════
 
     private List<Module> getFilteredModules() {
+        if (cachedFilteredModules != null && selCategory == lastFilterCat && searchText.equals(lastFilterQuery)) {
+            return cachedFilteredModules;
+        }
+        lastFilterCat = selCategory;
+        lastFilterQuery = searchText;
+
+        List<Module> list = new ArrayList<>();
         if (searchText.isBlank()) {
-            List<Module> list = new ArrayList<>();
             for (Module m : Oxevy.moduleManager.getModules()) {
                 if (m.getCategory() == selCategory && !m.hidden) list.add(m);
             }
-            return list;
+        } else {
+            String lower = searchText.toLowerCase();
+            for (Module m : Oxevy.moduleManager.getModules()) {
+                if (!m.hidden && m.getDisplayName().toLowerCase().contains(lower)) list.add(m);
+            }
         }
-        String lower = searchText.toLowerCase();
-        List<Module> list = new ArrayList<>();
-        for (Module m : Oxevy.moduleManager.getModules()) {
-            if (!m.hidden && m.getDisplayName().toLowerCase().contains(lower)) list.add(m);
-        }
+        cachedFilteredModules = list;
         return list;
     }
 
@@ -689,10 +913,80 @@ public class ClickGuiScreen extends Screen {
         }
         if (val instanceof Bind)      return new BindComponent((Setting<Bind>) setting, x, y, w, h);
         if (val instanceof Color)     return new ColorComponent((Setting<Color>) setting, x, y, w, h);
-        if (setting.isEnumSetting())    return new EnumComponent(setting, x, y, w, h);
+        if (setting.isEnumSetting())    return new DropdownComponent(setting, x, y, w, h);
         if (setting.isStringSetting())  return new StringComponent((Setting<String>) setting, x, y, w, h);
         if (setting.isButtonSetting())  return new ButtonComponent((Setting<Runnable>) setting, x, y, w, h);
         return new StringSettingComponent(setting, x, y, w, h);
+    }
+
+    // ── Text metrics / colour LUTs ─────────────────────────────────
+
+    /** Cached {@code Font.width}; the glyph walk is too costly for a render loop. */
+    private static int textWidth(String s) {
+        if (s == null || s.isEmpty()) return 0;
+        Integer cached = WIDTH_CACHE.get(s);
+        if (cached != null) return cached;
+        int w = CustomFont.font().width(s);
+        // Bound the cache so renamed modules / a burst of unique bind labels
+        // cannot keep growing it forever.
+        if (WIDTH_CACHE.size() > WIDTH_CACHE_CAP) WIDTH_CACHE.clear();
+        WIDTH_CACHE.put(s, w);
+        return w;
+    }
+
+    private static String bindLabel(int key) {
+        String cached = BIND_LABEL_CACHE.get(key);
+        if (cached != null) return cached;
+        String label = KeyboardUtil.getKeyName(key);
+        if (BIND_LABEL_CACHE.size() > 256) BIND_LABEL_CACHE.clear();
+        BIND_LABEL_CACHE.put(key, label);
+        return label;
+    }
+
+    /** Computes the static tab strip and label metrics exactly once. */
+    private static void ensureStaticLabels() {
+        if (TAB_X != null) return;
+
+        Category[] cats = Category.values();
+        TAB_X = new int[cats.length];
+        TAB_W = new int[cats.length];
+        int x = 8;
+        for (int i = 0; i < cats.length; i++) {
+            TAB_W[i] = textWidth(cats[i].getName()) + 16;
+            TAB_X[i] = x;
+            x += TAB_W[i] + 4;
+        }
+
+        HINT_TEXT = "Right-click a module to edit settings";
+        HINT_W = textWidth(HINT_TEXT);
+        CLOSE_TEXT = "[ESC]";
+        CLOSE_W = textWidth(CLOSE_TEXT);
+        FOOTER_TEXT = "LMB: Select | Toggle: Enable/Disable | Scroll: Navigate | ESC: Close";
+        FOOTER_W = textWidth(FOOTER_TEXT);
+        DESTRUCT_TEXT = "DESTRUCT";
+        DESTRUCT_W = textWidth(DESTRUCT_TEXT);
+        DESTRUCT_HOLD_TEXT = "HOLD";
+        DESTRUCT_HOLD_W = textWidth(DESTRUCT_HOLD_TEXT);
+    }
+
+    private static int[] buildLut(int from, int to) {
+        int[] lut = new int[LUT_STEPS + 1];
+        for (int i = 0; i <= LUT_STEPS; i++) {
+            lut[i] = lerpRGB(from, to, i / (float) LUT_STEPS);
+        }
+        return lut;
+    }
+
+    private static int lutIndex(float t) {
+        int i = (int) (t * LUT_STEPS + 0.5f);
+        return i < 0 ? 0 : (i > LUT_STEPS ? LUT_STEPS : i);
+    }
+
+    private static int lerpRGB(int from, int to, float t) {
+        int r = (int) (((from >> 16) & 0xFF) * (1f - t) + ((to >> 16) & 0xFF) * t);
+        int g = (int) (((from >> 8) & 0xFF) * (1f - t) + ((to >> 8) & 0xFF) * t);
+        int b = (int) ((from & 0xFF) * (1f - t) + (to & 0xFF) * t);
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
     @Override

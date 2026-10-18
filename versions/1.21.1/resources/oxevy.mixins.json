@@ -30,6 +30,7 @@
     "render.MixinWorldRenderer",
     "gui.MixinContainerScreen",
     "gui.MixinScreenAccessor",
+    "gui.MixinJoinMultiplayerScreen",
     "accessor.MinecraftAccessor",
     "accessor.FontManagerAccessor",
     "accessor.SkinManagerAccessor",

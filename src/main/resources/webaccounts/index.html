@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Oxevy Accounts</title>
+<!--
+  Self-contained by design: no external CSS, no React, no Babel, no CSP meta.
+  CEF serves this page over localhost and aggressively caches sub-resources, so
+  every extra file was a chance for a stale copy to render as an unstyled
+  document. One document, zero sub-resources, nothing to go stale.
+-->
+<style>
+/* ── Oxevy Accounts (Liquid Glass) ─────────────────────── */
+@font-face{font-family:'SF Pro';src:url('/fonts/sf_medium.ttf') format('truetype');font-weight:400 550;font-style:normal}
+@font-face{font-family:'SF Pro';src:url('/fonts/sf_bold.ttf') format('truetype');font-weight:600 850;font-style:normal}
+
+:root{
+  --s:1;
+  --glass:rgba(255,255,255,.06);
+  --glass-strong:rgba(255,255,255,.11);
+  --glass-hover:rgba(255,255,255,.14);
+  --stroke:rgba(255,255,255,.14);
+  --stroke-hover:rgba(255,255,255,.28);
+  --accent:#00FF66;
+  --accent-weak:rgba(0,255,102,.14);
+  --danger:#FF5555;
+  --txt1:rgba(255,255,255,.98);
+  --txt2:rgba(255,255,255,.68);
+  --txt3:rgba(255,255,255,.42);
+  font-family:'SF Pro',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  font-size:calc(13px * var(--s));
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+button,input{font:inherit;color:inherit;background:transparent;border:0;outline:none}
+html,body{height:100%;margin:0;overflow:hidden;background:transparent}
+body{color:var(--txt1);font-family:'SF Pro',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+#root{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+::selection{background:var(--accent-weak)}
+
+/* ── Background ─────────────────────────────────────────────
+   Brightness budget: the video is the light source, so the overlays
+   are deliberately weak. Two heavy scrims stacked here previously
+   compounded to near-opaque black and killed the footage.
+   .ac-wash lifts the whole frame slightly instead of darkening it,
+   which is what keeps the panel legible without dimming the room. */
+.ac-stage{position:absolute;inset:0;overflow:hidden;z-index:0}
+
+.ac-video{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.ac-video iframe{
+  position:absolute;top:0;left:50%;width:130%;height:130%;
+  transform:translateX(-50%) translateY(-11%);
+  border:0;pointer-events:none;
+}
+/* Fallback wash - only visible when the video cannot load. */
+.ac-bg{
+  position:absolute;inset:0;z-index:0;
+  background:
+    radial-gradient(ellipse 80% 80% at 50% 45%, rgba(0,255,102,.10) 0%, transparent 62%),
+    linear-gradient(165deg,#171d24 0%,#0d1116 55%,#080b0e 100%);
+}
+/* Single soft vignette. One layer, not two. */
+.ac-scrim{
+  position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(ellipse 85% 85% at 50% 50%, transparent 35%, rgba(0,0,0,.34) 100%);
+}
+.ac-noise{
+  position:absolute;inset:0;z-index:1;opacity:.025;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-size:256px 256px;
+}
+
+/* ── Window ──────────────────────────────────────────────── */
+.ac-root{
+  position:relative;z-index:2;inset:0;width:100%;height:100%;
+  display:flex;align-items:center;justify-content:center;
+  padding:calc(24px * var(--s));overflow:hidden;
+}
+.ac-window{
+  width:calc(430px * var(--s));
+  max-height:100%;
+  display:flex;flex-direction:column;position:relative;overflow:hidden;
+  border-radius:calc(22px * var(--s));
+  border:1px solid rgba(255,255,255,.22);
+  background:linear-gradient(165deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,.05) 48%,rgba(255,255,255,.09) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.38),
+    inset 0 -1px 0 rgba(255,255,255,.06),
+    0 calc(28px * var(--s)) calc(60px * var(--s)) rgba(0,0,0,.5);
+  backdrop-filter:blur(calc(24px * var(--s))) saturate(1.8) brightness(1.08);
+  -webkit-backdrop-filter:blur(calc(24px * var(--s))) saturate(1.8) brightness(1.08);
+  animation:ac-in .45s cubic-bezier(.22,1,.36,1) backwards;
+}
+/* Top sheen. */
+.ac-window::before{
+  content:"";position:absolute;inset:0 0 auto 0;height:50%;pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,255,255,.13),rgba(255,255,255,0));
+  border-radius:calc(22px * var(--s)) calc(22px * var(--s)) 0 0;
+}
+/* One finite sweep; an infinite one repaints CEF every frame. */
+.ac-window::after{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:3;
+  background:linear-gradient(115deg,transparent 34%,rgba(255,255,255,.08) 47%,transparent 60%);
+  transform:translateX(-120%);animation:ac-sheen 6.5s ease-in-out 1s 1;
+}
+@keyframes ac-in{from{opacity:0;transform:translateY(calc(10px * var(--s))) scale(.985)}to{opacity:1;transform:none}}
+@keyframes ac-sheen{0%{transform:translateX(-120%)}22%,100%{transform:translateX(120%)}}
+
+/* ── Header ──────────────────────────────────────────────── */
+.ac-header{
+  position:relative;z-index:2;flex-shrink:0;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:calc(13px * var(--s)) calc(16px * var(--s));
+  border-bottom:1px solid rgba(255,255,255,.10);
+}
+.ac-title{display:flex;align-items:baseline;gap:calc(8px * var(--s));min-width:0}
+.ac-header h1{font-size:calc(15px * var(--s));font-weight:600;letter-spacing:-.01em;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+.ac-count{
+  font-size:calc(10px * var(--s));font-weight:600;color:var(--txt3);
+  background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.12);
+  padding:calc(1px * var(--s)) calc(6px * var(--s));
+  border-radius:calc(6px * var(--s));white-space:nowrap;
+}
+.ac-close{
+  width:calc(26px * var(--s));height:calc(26px * var(--s));border-radius:calc(9px * var(--s));
+  display:grid;place-items:center;color:var(--txt3);font-size:calc(13px * var(--s));flex-shrink:0;
+  transition:background 120ms,color 120ms,transform 120ms;
+}
+.ac-close:hover{color:var(--txt1);background:var(--glass-hover)}
+.ac-close:active{transform:scale(.92)}
+
+/* ── Body ────────────────────────────────────────────────── */
+.ac-body{
+  position:relative;z-index:2;display:flex;flex-direction:column;
+  gap:calc(11px * var(--s));padding:calc(13px * var(--s));min-height:0;
+}
+
+/* Active account - the one thing you actually want to see first. */
+.ac-current{
+  display:flex;align-items:center;gap:calc(11px * var(--s));
+  padding:calc(11px * var(--s)) calc(13px * var(--s));
+  border-radius:calc(13px * var(--s));
+  background:linear-gradient(135deg,rgba(0,255,102,.17) 0%,rgba(0,255,102,.07) 100%);
+  border:1px solid rgba(0,255,102,.34);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.20), 0 0 calc(18px * var(--s)) rgba(0,255,102,.10);
+}
+.ac-current .ac-avatar{
+  width:calc(30px * var(--s));height:calc(30px * var(--s));
+  border-radius:calc(9px * var(--s));
+  border-color:rgba(0,255,102,.48);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.30), 0 0 calc(10px * var(--s)) rgba(0,255,102,.32);
+}
+.ac-current .lbl{
+  font-size:calc(9px * var(--s));font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--accent);flex-shrink:0;
+}
+.ac-current .val{
+  font-size:calc(14px * var(--s));font-weight:600;color:var(--txt1);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.25;
+}
+.ac-current .meta{display:flex;flex-direction:column;gap:calc(1px * var(--s));min-width:0;flex:1}
+
+.ac-section{
+  font-size:calc(9px * var(--s));font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--txt3);padding-left:calc(2px * var(--s));
+}
+
+/* Account list */
+.ac-list{
+  display:flex;flex-direction:column;gap:calc(4px * var(--s));
+  overflow-y:auto;min-height:0;max-height:calc(216px * var(--s));
+  padding-right:calc(2px * var(--s));margin-right:calc(-2px * var(--s));
+}
+.ac-row{
+  position:relative;display:flex;align-items:center;gap:calc(10px * var(--s));
+  padding:calc(9px * var(--s)) calc(10px * var(--s));
+  border-radius:calc(12px * var(--s));
+  background:var(--glass);border:1px solid transparent;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.15);
+  transition:background 120ms,border-color 120ms;
+}
+.ac-row:hover{background:var(--glass-hover);border-color:rgba(255,255,255,.10)}
+.ac-row.on{background:var(--glass-strong);border-color:var(--stroke)}
+.ac-row.on::before{
+  content:"";position:absolute;left:0;top:calc(8px * var(--s));bottom:calc(8px * var(--s));
+  width:calc(3px * var(--s));border-radius:0 calc(3px * var(--s)) calc(3px * var(--s)) 0;
+  background:var(--accent);box-shadow:0 0 calc(8px * var(--s)) rgba(0,255,102,.55);
+}
+.ac-avatar{
+  width:calc(24px * var(--s));height:calc(24px * var(--s));flex-shrink:0;
+  border-radius:calc(7px * var(--s));
+  image-rendering:pixelated;
+  background:rgba(255,255,255,.10);
+  border:1px solid rgba(255,255,255,.22);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.30), 0 1px calc(3px * var(--s)) rgba(0,0,0,.4);
+  object-fit:cover;
+}
+.ac-name{
+  flex:1;min-width:0;font-size:calc(13px * var(--s));color:var(--txt2);
+  text-shadow:0 1px 2px rgba(0,0,0,.35);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ac-row.on .ac-name{color:var(--txt1);font-weight:600}
+.ac-badge{
+  font-size:calc(9px * var(--s));font-weight:700;color:var(--accent);
+  background:rgba(0,255,102,.16);border:1px solid rgba(0,255,102,.32);
+  padding:calc(2px * var(--s)) calc(6px * var(--s));
+  border-radius:calc(6px * var(--s));line-height:calc(12px * var(--s));flex-shrink:0;
+}
+
+/* Buttons */
+.ac-btn{
+  padding:calc(5px * var(--s)) calc(11px * var(--s));
+  border-radius:calc(9px * var(--s));
+  font-size:calc(11px * var(--s));font-weight:600;flex-shrink:0;
+  background:var(--glass-strong);border:1px solid rgba(255,255,255,.15);color:var(--txt1);
+  transition:background 120ms,border-color 120ms,transform 120ms,opacity 120ms;
+}
+.ac-btn:hover:not(:disabled){background:var(--glass-hover);border-color:var(--stroke-hover)}
+.ac-btn:active:not(:disabled){transform:scale(.96)}
+.ac-btn:disabled{opacity:.4;cursor:not-allowed}
+.ac-btn.primary{background:rgba(0,255,102,.20);border-color:rgba(0,255,102,.42);color:var(--txt1)}
+.ac-btn.primary:hover:not(:disabled){background:rgba(0,255,102,.30);border-color:rgba(0,255,102,.62)}
+.ac-btn.danger{background:rgba(255,85,85,.13);border-color:rgba(255,85,85,.30);color:var(--txt1)}
+.ac-btn.danger:hover:not(:disabled){background:rgba(255,85,85,.24);border-color:rgba(255,85,85,.50)}
+/* Remove is a low-frequency action: keep it quiet until hover. */
+.ac-btn.ghost{background:transparent;border-color:transparent;color:var(--txt3)}
+.ac-btn.ghost:hover:not(:disabled){background:rgba(255,85,85,.18);border-color:rgba(255,85,85,.34);color:var(--txt1)}
+
+/* Add account */
+.ac-add{
+  display:flex;gap:calc(8px * var(--s));align-items:center;
+  padding:calc(8px * var(--s));
+  border-radius:calc(13px * var(--s));
+  background:rgba(0,0,0,.20);
+  border:1px solid rgba(255,255,255,.10);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.28);
+  transition:border-color 150ms,background 150ms,box-shadow 150ms;
+}
+.ac-add:focus-within{border-color:rgba(0,255,102,.36);background:rgba(0,0,0,.26);box-shadow:inset 0 1px 2px rgba(0,0,0,.28), 0 0 0 calc(3px * var(--s)) rgba(0,255,102,.10)}
+.ac-input{
+  flex:1;min-width:0;padding:calc(4px * var(--s)) calc(5px * var(--s));
+  font-size:calc(12px * var(--s));
+}
+.ac-input::placeholder{color:var(--txt3)}
+.ac-btn.add{
+  padding:calc(6px * var(--s)) calc(13px * var(--s));
+  background:rgba(0,255,102,.20);border-color:rgba(0,255,102,.42);
+}
+.ac-btn.add:hover:not(:disabled){background:rgba(0,255,102,.30);border-color:rgba(0,255,102,.62)}
+
+/* States */
+.ac-msg{
+  font-size:calc(11px * var(--s));color:var(--txt3);text-align:center;
+  min-height:calc(14px * var(--s));
+}
+.ac-msg.ok{color:var(--accent)}
+.ac-msg.err{color:var(--danger)}
+.ac-empty,.ac-loading{
+  font-size:calc(12px * var(--s));color:var(--txt3);text-align:center;
+  padding:calc(22px * var(--s)) calc(14px * var(--s));
+  border-radius:calc(13px * var(--s));
+  background:rgba(255,255,255,.04);
+  border:1px dashed rgba(255,255,255,.14);
+}
+.ac-failed{
+  display:flex;flex-direction:column;align-items:center;gap:calc(9px * var(--s));
+  color:var(--danger);border-color:rgba(255,85,85,.3);
+}
+
+/* Scrollbars */
+::-webkit-scrollbar{width:calc(4px * var(--s))}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:999px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.34)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(function () {
+  "use strict";
+
+  // ---- scale ----------------------------------------------------------------
+  // #scale=N is physical framebuffer px per CSS px (same contract as the
+  // ClickGui / main menu). It is an upper bound only: the panel is authored at
+  // scale 1, and we pick the largest scale that still fits the viewport so a
+  // high GUI scale compresses instead of overflowing.
+  var hash = location.hash || "";
+  var m = hash.match(/#scale=([\d.]+)/);
+  var base = Math.max(1, parseFloat(m && m[1]) || 1);
+  var root = document.documentElement;
+  root.style.setProperty("--s-base", base);
+
+  var win = null;
+  function fit() {
+    if (!win) return;
+    var prev = root.style.getPropertyValue("--s");
+    root.style.setProperty("--s", "1");
+    var h = win.offsetHeight;
+    root.style.setProperty("--s", prev);
+    if (!h) return;
+    var pad = 48;
+    var s = Math.min(base, window.innerWidth / (430 + pad), window.innerHeight / (h + pad));
+    root.style.setProperty("--s", Math.max(1, s));
+  }
+  window.addEventListener("resize", fit);
+
+  // ---- api ------------------------------------------------------------------
+  function req(path, username) {
+    var opts = username == null ? undefined : {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: username })
+    };
+    return fetch(path, opts).then(function (r) {
+      if (!r.ok) return r.text().then(function (t) { throw new Error(t || ("HTTP " + r.status)); });
+      return r.json();
+    });
+  }
+
+  var STEVE = "https://mc-heads.net/avatar/8667ba71b85a4004af544816a921c14e/32";
+  var BG_VIDEO_ID = "RnnctM5Rf9I";
+  var noVideo = /(^|[#&])novideo\b/.test(hash);
+
+  // Accounts are stored as plain usernames; mc-heads resolves them server-side.
+  function headUrl(name) {
+    return "https://mc-heads.net/avatar/" + encodeURIComponent(name) + "/32";
+  }
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function avatar(name) {
+    var img = el("img", "ac-avatar");
+    img.src = headUrl(name);
+    img.alt = "";
+    img.draggable = false;
+    img.addEventListener("error", function () {
+      if (img.src !== STEVE) img.src = STEVE;
+    });
+    return img;
+  }
+
+  // ---- state ----------------------------------------------------------------
+  var state = { accounts: [], current: "", username: "", msg: null, loading: true, failed: false, busy: "" };
+  var msgTimer = null;
+
+  function flash(text, ok) {
+    state.msg = { text: text, ok: ok };
+    render();
+    if (msgTimer) clearTimeout(msgTimer);
+    msgTimer = setTimeout(function () { state.msg = null; render(); }, 1800);
+  }
+
+  function load() {
+    return req("/api/accounts/list").then(function (data) {
+      state.accounts = Array.isArray(data.accounts) ? data.accounts : [];
+      state.current = data.current || "";
+      state.failed = false;
+    }, function (e) {
+      // An abandoned socket and an empty account store are indistinguishable
+      // client-side, so keep a distinct failure state rather than silently
+      // rendering "No accounts yet".
+      console.error("accounts list failed", e);
+      state.failed = true;
+      state.accounts = [];
+      state.current = "";
+    }).then(function () {
+      state.loading = false;
+      render();
+      fit();
+    });
+  }
+
+  // ---- actions --------------------------------------------------------------
+  function add() {
+    var name = state.username.trim();
+    if (!name) return;
+    state.busy = "add";
+    render();
+    req("/api/accounts/add", name).then(function () {
+      state.username = "";
+      state.busy = "";
+      input.value = "";
+      return load().then(function () { flash("Added " + name, true); });
+    }, function (e) {
+      state.busy = "";
+      flash(e.message || "Could not add account", false);
+    });
+  }
+
+  function remove(name) {
+    state.busy = name;
+    render();
+    req("/api/accounts/remove", name).then(function () {
+      state.busy = "";
+      return load().then(function () { flash("Removed " + name, true); });
+    }, function (e) {
+      state.busy = "";
+      flash(e.message || "Could not remove account", false);
+    });
+  }
+
+  function switchTo(name) {
+    state.busy = name;
+    render();
+    req("/api/accounts/switch", name).then(function () {
+      state.current = name;
+      state.busy = "";
+      flash("Switched to " + name, true);
+    }, function (e) {
+      state.busy = "";
+      flash(e.message || "Could not switch account", false);
+    });
+  }
+
+  // ---- skeleton -------------------------------------------------------------
+  var acRoot = el("div", "ac-root");
+
+  // Background stage: video over a gradient wash, plus one soft vignette.
+  var stage = el("div", "ac-stage");
+  // When embedded as an overlay iframe in the main menu, hide the full-screen
+  // stage so only the window panel floats over the menu. The glass panel then
+  // has no backdrop to blur (an iframe can only blur in-frame content), which
+  // renders as a flat gray box - so swap it for an opaque dark glass gradient.
+  if (window.self !== window.top) {
+    stage.style.display = "none";
+    var embedCss = document.createElement("style");
+    // Frosted glass: light tint + backdrop blur (thin alpha so the blurred menu
+    // reads through; mcef software-rasterises, so this costs per-frame while open).
+    embedCss.textContent =
+      "html,body{background:transparent!important}" +
+      ".ac-window{" +
+      "backdrop-filter:blur(18px) saturate(1.5)!important;" +
+      "-webkit-backdrop-filter:blur(18px) saturate(1.5)!important;" +
+      "background:linear-gradient(165deg,rgba(30,36,52,.36) 0%,rgba(21,26,40,.40) 55%,rgba(14,17,26,.46) 100%)!important;" +
+      "box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 calc(28px * var(--s)) calc(60px * var(--s)) rgba(0,0,0,.55)!important}" +
+      ".ac-window::before{background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,0))!important}";
+    (document.head || document.documentElement).appendChild(embedCss);
+  }
+  stage.appendChild(el("div", "ac-bg"));
+  if (!noVideo) {
+    var vid = el("div", "ac-video");
+    vid.setAttribute("aria-hidden", "true");
+    var frame = el("iframe");
+    frame.src = "https://www.youtube.com/embed/" + BG_VIDEO_ID +
+      "?autoplay=1&mute=1&loop=1&playlist=" + BG_VIDEO_ID +
+      "&controls=0&disablekb=1&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3";
+    frame.title = "Minecraft Soothing Scenes";
+    frame.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
+    frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+    frame.frameBorder = "0";
+    frame.allowFullScreen = true;
+    vid.appendChild(frame);
+    stage.appendChild(vid);
+  }
+  stage.appendChild(el("div", "ac-scrim"));
+  stage.appendChild(el("div", "ac-noise"));
+  acRoot.appendChild(stage);
+
+  var panel = el("div", "ac-window");
+  win = panel;
+
+  var header = el("div", "ac-header");
+  var title = el("div", "ac-title");
+  title.appendChild(el("h1", null, "Accounts"));
+  var count = el("span", "ac-count", "0");
+  title.appendChild(count);
+  header.appendChild(title);
+  var close = el("button", "ac-close", "\u2715");
+  close.title = "Close";
+  close.addEventListener("click", function () { window.close(); });
+  header.appendChild(close);
+  panel.appendChild(header);
+
+  var body = el("div", "ac-body");
+  var slot = el("div");
+  body.appendChild(slot);
+
+  var addRow = el("div", "ac-add");
+  var input = el("input", "ac-input");
+  input.type = "text";
+  input.placeholder = "Add an account";
+  input.maxLength = 16;
+  input.spellcheck = false;
+  input.autocapitalize = "off";
+  input.autocomplete = "off";
+  addRow.appendChild(input);
+  var addBtn = el("button", "ac-btn add", "Add");
+  addRow.appendChild(addBtn);
+  body.appendChild(addRow);
+
+  var msgBox = el("div", "ac-msg");
+  body.appendChild(msgBox);
+
+  panel.appendChild(body);
+  acRoot.appendChild(panel);
+  document.getElementById("root").appendChild(acRoot);
+
+  input.addEventListener("input", function () { state.username = input.value; renderMsg(); addBtn.disabled = state.busy === "add" || !state.username.trim(); });
+  input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); add(); } e.stopPropagation(); });
+  addBtn.addEventListener("click", add);
+
+  function renderMsg() {
+    msgBox.className = "ac-msg" + (state.msg ? (state.msg.ok ? " ok" : " err") : "");
+    msgBox.textContent = state.msg ? state.msg.text : "";
+  }
+
+  function render() {
+    slot.textContent = "";
+    count.textContent = String(state.accounts.length);
+
+    if (state.loading) {
+      slot.appendChild(el("div", "ac-loading", "Loading\u2026"));
+      renderMsg();
+      addBtn.disabled = true;
+      return;
+    }
+
+    if (state.failed) {
+      var box = el("div", "ac-empty ac-failed");
+      box.appendChild(el("div", null, "Could not reach Oxevy"));
+      var retry = el("button", "ac-btn", "Retry");
+      retry.addEventListener("click", function () { state.loading = true; render(); load(); });
+      box.appendChild(retry);
+      slot.appendChild(box);
+      renderMsg();
+      addBtn.disabled = true;
+      return;
+    }
+
+    if (state.current) {
+      var cur = el("div", "ac-current");
+      cur.appendChild(avatar(state.current));
+      var meta = el("div", "meta");
+      meta.appendChild(el("span", "lbl", "Playing as"));
+      meta.appendChild(el("span", "val", state.current));
+      cur.appendChild(meta);
+      slot.appendChild(cur);
+    }
+
+    if (!state.accounts.length) {
+      slot.appendChild(el("div", "ac-empty", state.current ? "No saved accounts yet." : "No accounts yet \u2014 add one below."));
+      renderMsg();
+      addBtn.disabled = state.busy === "add" || !state.username.trim();
+      return;
+    }
+
+    var others = state.accounts.filter(function (a) { return a !== state.current; });
+
+    if (others.length) {
+      slot.appendChild(el("div", "ac-section", "Switch account"));
+      var list = el("div", "ac-list");
+      others.forEach(function (name) {
+        var busy = state.busy === name;
+        var row = el("div", "ac-row");
+        row.appendChild(avatar(name));
+        row.appendChild(el("span", "ac-name", name));
+        var sw = el("button", "ac-btn primary", busy ? "\u2026" : "Switch");
+        sw.disabled = busy;
+        sw.addEventListener("click", function () { switchTo(name); });
+        row.appendChild(sw);
+        var rm = el("button", "ac-btn ghost", "Remove");
+        rm.disabled = busy;
+        rm.addEventListener("click", function () { remove(name); });
+        row.appendChild(rm);
+        list.appendChild(row);
+      });
+      slot.appendChild(list);
+    }
+
+    renderMsg();
+    addBtn.disabled = state.busy === "add" || !state.username.trim();
+  }
+
+  render();
+  load();
+})();
+</script>
+</body>
+</html>

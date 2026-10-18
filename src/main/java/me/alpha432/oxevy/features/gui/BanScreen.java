@@ -92,7 +92,7 @@ public class BanScreen extends Screen {
         reloadHover = Math.max(0f, Math.min(1f, reloadHover));
         boolean reloadDisabled = checking;
 
-        RenderUtil.roundRect(context, reloadX, btnY, BTN_W, BTN_H, 4f, reloadDisabled ? 0x0AFFFFFF : (reloadHovered ? 0x22FFFFFF : 0x0AFFFFFF));
+        RenderUtil.roundRect(context, reloadX, btnY, BTN_W, BTN_H, 4f, reloadDisabled ? 0x14FFFFFF : (reloadHovered ? 0x33FFFFFF : 0x22FFFFFF));
         RenderUtil.rect(context, reloadX, btnY, reloadX + BTN_W, btnY + BTN_H, 0x55FFFFFF, 1f);
         int reloadIndicatorW = 2 + (int) (reloadHover * 3);
         RenderUtil.roundRect(context, reloadX, btnY + 2, reloadIndicatorW, BTN_H - 4, 1f, 0xAAFFFFFF);
@@ -106,7 +106,7 @@ public class BanScreen extends Screen {
         exitHover += (exitTarget - exitHover) * 12f * delta;
         exitHover = Math.max(0f, Math.min(1f, exitHover));
 
-        RenderUtil.roundRect(context, exitX, btnY, BTN_W, BTN_H, 4f, exitHovered ? 0x22FFFFFF : 0x0AFFFFFF);
+        RenderUtil.roundRect(context, exitX, btnY, BTN_W, BTN_H, 4f, exitHovered ? 0x33FFFFFF : 0x22FFFFFF);
         RenderUtil.rect(context, exitX, btnY, exitX + BTN_W, btnY + BTN_H, 0x55FF4444, 1f);
         int exitIndicatorW = 2 + (int) (exitHover * 3);
         RenderUtil.roundRect(context, exitX, btnY + 2, exitIndicatorW, BTN_H - 4, 1f, 0xAAFF4444);

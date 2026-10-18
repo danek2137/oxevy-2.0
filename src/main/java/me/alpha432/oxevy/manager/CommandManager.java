@@ -43,6 +43,7 @@ public class CommandManager extends Feature implements Jsonable {
         register(new ConfigCommand());
         register(new TempDCommand());
         register(new OxevyUsersCommand());
+        register(new MacroCommand());
 
         LOGGER.info("Registered {} commands", commandList.size());
         Oxevy.configManager.addConfig(this);

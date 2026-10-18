@@ -91,10 +91,10 @@ if (mcBuildOverride) {
 
 def requestedTasks = gradle.startParameter.taskNames
 def shouldBumpVersion = false
+// Only bump version for explicit release tasks, not regular builds
 for (taskName in requestedTasks) {
     String lower = taskName.toLowerCase()
-    if (lower.contains('build') || lower.contains('assemble') || lower.contains('jar') ||
-            lower.contains('run') || lower.contains('processresources') || lower.contains('generatebuildconfig')) {
+    if (lower.contains('release') || lower.contains('publish') || lower.contains('bump')) {
         shouldBumpVersion = true
         break
     }
@@ -240,6 +240,14 @@ dependencies {
     // Fabric Language Kotlin - include runtime
     modImplementation "net.fabricmc:fabric-language-kotlin:${project.fabric_kotlin_version}"
     include("net.fabricmc:fabric-language-kotlin:${project.fabric_kotlin_version}")
+
+    // MCEF (built-in browser) - 1.21.11 version.
+    // mcef-modern is a separate Fabric mod; do NOT include it as a nested JAR
+    // (it lacks fabric.mod.json). It must be present in the user's mods folder
+    // at runtime. We declare modImplementation for compile-time access only.
+    modImplementation files("libs/mcef-modern-0.3.3+mc1.21.11.jcef146.0.10.jar")
+    // jcef-api and jcefmaven are mcef-modern's own runtime deps; they come
+    // transitively via mcef-modern, so we don't need to bundle them.
     
     // Explicitly include kotlin runtime
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.0.21")

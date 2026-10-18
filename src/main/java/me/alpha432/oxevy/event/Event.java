@@ -10,4 +10,8 @@ public class Event {
     public void cancel() {
         cancelled = true;
     }
+
+    public void setCancelled(boolean cancelled) {
+        this.cancelled = cancelled;
+    }
 }

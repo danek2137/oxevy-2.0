@@ -96,7 +96,7 @@ public class OxevySettingsScreen extends Screen {
         int cfgBtnX = x + WIDTH - 2 * ICON_BTN_PAD - 2 * ICON_BTN_SIZE;
         int cfgBtnY = y + ICON_BTN_PAD;
         boolean cfgBtnHover = mouseX >= cfgBtnX && mouseX <= cfgBtnX + ICON_BTN_SIZE && mouseY >= cfgBtnY && mouseY <= cfgBtnY + ICON_BTN_SIZE;
-        int cfgBtnBg = cfgBtnHover ? 0x33FFFFFF : 0x22000000;
+        int cfgBtnBg = cfgBtnHover ? 0x33FFFFFF : 0x22FFFFFF;
         RenderUtil.rect(context, cfgBtnX, cfgBtnY, cfgBtnX + ICON_BTN_SIZE, cfgBtnY + ICON_BTN_SIZE, cfgBtnBg);
         RenderUtil.rect(context, cfgBtnX, cfgBtnY, cfgBtnX + ICON_BTN_SIZE, cfgBtnY + ICON_BTN_SIZE, 0x33FFFFFF, 1.0f);
         int cfgIconColor = cfgBtnHover ? 0xFFFFFFFF : 0xFFBBBBBB;
@@ -106,7 +106,7 @@ public class OxevySettingsScreen extends Screen {
         int btnX = x + WIDTH - ICON_BTN_PAD - ICON_BTN_SIZE;
         int btnY = y + ICON_BTN_PAD;
         boolean btnHover = mouseX >= btnX && mouseX <= btnX + ICON_BTN_SIZE && mouseY >= btnY && mouseY <= btnY + ICON_BTN_SIZE;
-        int btnBg = btnHover ? 0x33FFFFFF : 0x22000000;
+        int btnBg = btnHover ? 0x33FFFFFF : 0x22FFFFFF;
         RenderUtil.rect(context, btnX, btnY, btnX + ICON_BTN_SIZE, btnY + ICON_BTN_SIZE, btnBg);
         RenderUtil.rect(context, btnX, btnY, btnX + ICON_BTN_SIZE, btnY + ICON_BTN_SIZE, 0x33FFFFFF, 1.0f);
         int iconColor = btnHover ? 0xFFFFFFFF : 0xFFBBBBBB;
@@ -290,6 +290,9 @@ public class OxevySettingsScreen extends Screen {
 
         focusedStringSetting = null;
         listeningBindSetting = null;
+        for (SettingComponent comp : settingComponents.values()) {
+            if (comp instanceof DropdownComponent dc && !dc.isHovered(mouseX, mouseY)) dc.close();
+        }
 
         return super.mouseClicked(click, doubled);
     }
@@ -348,6 +351,10 @@ public class OxevySettingsScreen extends Screen {
             return true;
         }
 
+        for (SettingComponent comp : settingComponents.values()) {
+            if (comp.isCapturingInput() && comp.keyPressed(input)) return true;
+        }
+
         if (key == GLFW.GLFW_KEY_ESCAPE) {
             this.onClose();
             return true;
@@ -376,7 +383,7 @@ public class OxevySettingsScreen extends Screen {
         if (value instanceof Boolean) return new BooleanComponent((Setting<Boolean>) setting, x, y, compWidth, 12);
         if (value instanceof Number && setting.getMin() != null) return new SliderComponent((Setting<Number>) setting, x, y, compWidth, 12);
         if (value instanceof Bind) return new BindComponent((Setting<Bind>) setting, x, y, compWidth, 12);
-        if (setting.isEnumSetting()) return new EnumComponent(setting, x, y, compWidth, 12);
+        if (setting.isEnumSetting()) return new DropdownComponent(setting, x, y, compWidth, 12);
         if (setting.isStringSetting()) return new StringComponent((Setting<String>) setting, x, y, compWidth, 12);
         if (setting.isButtonSetting()) return new ButtonComponent((Setting<Runnable>) setting, x, y, compWidth, 12);
         if (value instanceof Color) return new ColorComponent((Setting<Color>) setting, x, y, compWidth, 12);

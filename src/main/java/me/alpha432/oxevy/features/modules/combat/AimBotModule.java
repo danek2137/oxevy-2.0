@@ -120,6 +120,7 @@ public class AimBotModule extends Module {
 
     private boolean isValid(Entity entity) {
         if (entity == null || entity.equals(mc.player)) return false;
+        if (me.alpha432.oxevy.util.entity.GhostPlayerEntity.isGhost(entity)) return false;
         if (!entity.isAlive()) return false;
         if (!invisibles.getValue() && entity.isInvisible()) return false;
         

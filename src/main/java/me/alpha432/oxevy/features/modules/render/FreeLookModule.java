@@ -31,6 +31,7 @@ public class FreeLookModule extends Module {
         cameraYaw = mc.player.getYRot();
         cameraPitch = mc.player.getXRot();
         prePers = mc.options.getCameraType();
+        if (prePers == null) prePers = CameraType.FIRST_PERSON;
 
         if (prePers != CameraType.THIRD_PERSON_BACK && togglePerspective.getValue()) {
             mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);
@@ -39,7 +40,9 @@ public class FreeLookModule extends Module {
 
     @Override
     public void onDisable() {
-        if (mc.options.getCameraType() != prePers && togglePerspective.getValue()) {
+        if (mc.options.getCameraType() != null && mc.options.getCameraType() != prePers && togglePerspective.getValue()) {
+            mc.options.setCameraType(prePers);
+        } else if (prePers != null && togglePerspective.getValue()) {
             mc.options.setCameraType(prePers);
         }
     }

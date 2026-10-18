@@ -21,6 +21,11 @@ object OxevySounds {
     @JvmField val MOAN2 = of("moan2")
     @JvmField val MOAN3 = of("moan3")
     @JvmField val MOAN4 = of("moan4")
+    @JvmField val RUST_HEADSHOT = of("rust_headshot")
+    @JvmField val GUI_OPEN = of("gui_open")
+    @JvmField val GUI_CLOSE = of("gui_close")
+    @JvmField val TURN_ON_CLICK = of("turn_on_click")
+    @JvmField val TURN_OFF_CLICK = of("turn_off_click")
 
     private fun of(name: String): SoundEvent {
         return SoundEvent.createVariableRangeEvent(Identifier.parse("oxevy:$name"))

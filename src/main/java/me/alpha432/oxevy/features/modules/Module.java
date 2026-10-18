@@ -74,9 +74,7 @@ public class Module extends Feature implements Jsonable, Toggleable {
         this.enabled.setValue(true);
         EVENT_BUS.register(this);
         EVENT_BUS.post(new ClientEvent(ClientEvent.Type.TOGGLE_MODULE, this));
-        if (mc.getSoundManager() != null) {
-            mc.getSoundManager().play(SimpleSoundInstance.forUI(OxevySounds.ENABLE, 1.0f));
-        }
+        playEnableSound();
         this.onToggle();
         if (nullCheck()) return;
         this.onEnable();
@@ -86,12 +84,22 @@ public class Module extends Feature implements Jsonable, Toggleable {
         this.enabled.setValue(false);
         EVENT_BUS.unregister(this);
         EVENT_BUS.post(new ClientEvent(ClientEvent.Type.TOGGLE_MODULE, this));
-        if (mc.getSoundManager() != null) {
-            mc.getSoundManager().play(SimpleSoundInstance.forUI(OxevySounds.DISABLE, 1.0f));
-        }
+        playDisableSound();
         this.onToggle();
         if (nullCheck()) return;
         this.onDisable();
+    }
+
+    protected void playEnableSound() {
+        if (mc.getSoundManager() != null) {
+            mc.getSoundManager().play(SimpleSoundInstance.forUI(OxevySounds.TURN_ON_CLICK, 1.0f));
+        }
+    }
+
+    protected void playDisableSound() {
+        if (mc.getSoundManager() != null) {
+            mc.getSoundManager().play(SimpleSoundInstance.forUI(OxevySounds.TURN_OFF_CLICK, 1.0f));
+        }
     }
 
     public String getDisplayName() {
@@ -154,7 +162,6 @@ public class Module extends Feature implements Jsonable, Toggleable {
     @Override
     public JsonElement toJson() {
         JsonObject object = new JsonObject();
-        object.addProperty("Category", category.name());
         for (Setting<?> setting : getSettings()) {
             try {
                 if (setting.getValue() instanceof Bind keyBind) {

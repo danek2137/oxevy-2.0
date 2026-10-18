@@ -5,7 +5,7 @@ import org.apache.logging.log4j.Logger;
 
 public class DiscordRpcManager {
     private static final Logger LOG = LogManager.getLogger();
-    private static final String DEFAULT_CLIENT_ID = "1531698504605630554";
+    private static final String DEFAULT_CLIENT_ID = "1503936816305143819";
     private static boolean enabled = false;
     private static long startTimestampSec = 0L;
 

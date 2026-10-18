@@ -1,5 +1,7 @@
 package me.alpha432.oxevy.mixin.chat;
 
+import me.alpha432.oxevy.Oxevy;
+import me.alpha432.oxevy.features.modules.client.NickChangerModule;
 import me.alpha432.oxevy.util.player.PlayerBadges;
 import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
@@ -14,12 +16,21 @@ public class MixinChatTypeBound {
     @Inject(method = "decorate(Lnet/minecraft/network/chat/Component;)Lnet/minecraft/network/chat/Component;", at = @At("HEAD"), cancellable = true)
     private void addBadgeToSenderName(Component content, CallbackInfoReturnable<Component> cir) {
         ChatType.Bound self = (ChatType.Bound) (Object) this;
-        String senderName = self.name().getString();
+        Component sender = self.name();
+        String senderName = sender.getString();
         String badge = PlayerBadges.getBadge(senderName);
-        if (badge.isEmpty()) return;
+        if (!badge.isEmpty()) {
+            sender = Component.literal(badge + " ").withStyle(sender.getStyle()).append(sender.copy());
+        }
 
-        Component badgedName = Component.literal(badge + " ").withStyle(self.name().getStyle()).append(self.name().copy());
-        ChatType.Bound badgedBound = new ChatType.Bound(self.chatType(), badgedName, self.targetName());
-        cir.setReturnValue(badgedBound.decorate(content));
+        NickChangerModule nickChanger = Oxevy.moduleManager.getModuleByClass(NickChangerModule.class);
+        if (nickChanger != null && nickChanger.chat.getValue()) {
+            sender = nickChanger.replace(sender);
+        }
+
+        if (sender == self.name()) return;
+
+        ChatType.Bound changedBound = new ChatType.Bound(self.chatType(), sender, self.targetName());
+        cir.setReturnValue(changedBound.decorate(content));
     }
 }

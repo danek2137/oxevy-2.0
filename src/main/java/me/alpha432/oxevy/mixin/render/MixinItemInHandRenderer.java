@@ -4,10 +4,12 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import me.alpha432.oxevy.Oxevy;
 import me.alpha432.oxevy.features.modules.render.HandCharmsModule;
 import me.alpha432.oxevy.features.modules.render.HandViewModule;
+import me.alpha432.oxevy.features.modules.render.AnimationsModule;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.ItemInHandRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.item.ItemStack;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
@@ -88,6 +90,23 @@ public abstract class MixinItemInHandRenderer {
                 (float) handCharms.scale.getValue(),
                 (float) handCharms.scale.getValue()
             );
+        }
+    }
+
+    @Inject(
+        method = "swingArm(FLcom/mojang/blaze3d/vertex/PoseStack;ILnet/minecraft/world/entity/HumanoidArm;)V",
+        at = @At("HEAD"),
+        cancellable = true
+    )
+    private void onSwingArm(float progress, PoseStack matrices, int light, HumanoidArm arm, CallbackInfo ci) {
+        AnimationsModule anim = Oxevy.moduleManager.getModuleByClass(AnimationsModule.class);
+        if (anim != null && anim.isEnabled()) {
+            boolean isMain = arm == HumanoidArm.RIGHT;
+            boolean applyArm = (isMain && anim.mainHand.getValue()) || (!isMain && anim.offHand.getValue());
+            if (applyArm && anim.shouldApply()) {
+                anim.apply(matrices, arm, progress);
+                ci.cancel();
+            }
         }
     }
 }

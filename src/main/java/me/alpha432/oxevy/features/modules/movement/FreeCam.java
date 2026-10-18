@@ -48,6 +48,7 @@ public class FreeCam extends Module {
         speedValue = speed.getValue();
         lastHealth = player.getHealth();
         prevPerspective = mc.options.getCameraType();
+        if (prevPerspective == null) prevPerspective = CameraType.FIRST_PERSON;
 
         if (mc.options.getCameraType() == CameraType.THIRD_PERSON_FRONT) {
             yaw += 180;
@@ -68,7 +69,11 @@ public class FreeCam extends Module {
         }
 
         mc.player.setNoGravity(false);
-        mc.options.setCameraType(prevPerspective);
+        if (prevPerspective != null) {
+            mc.options.setCameraType(prevPerspective);
+        } else {
+            mc.options.setCameraType(CameraType.FIRST_PERSON);
+        }
     }
 
     @Override
@@ -106,7 +111,7 @@ public class FreeCam extends Module {
             player.setPos(frozenPos.x, frozenPos.y, frozenPos.z);
         }
 
-        if (!mc.options.getCameraType().isFirstPerson()) mc.options.setCameraType(CameraType.FIRST_PERSON);
+        if (mc.options.getCameraType() != null && !mc.options.getCameraType().isFirstPerson()) mc.options.setCameraType(CameraType.FIRST_PERSON);
 
         long handle = mc.getWindow().handle();
         forward = GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_W) == GLFW.GLFW_PRESS;

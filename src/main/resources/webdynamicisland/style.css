@@ -1,0 +1,214 @@
+/* ── Oxevy Dynamic Island — two exact designs ───────────────────
+ *
+ * The Java side sizes the CEF browser to the widget's GUI size × guiScale
+ * physical pixels and blits the texture 1:1 onto the widget. CEF's CSS
+ * viewport therefore equals the widget's physical size, so design px are
+ * recovered as viewportHeight / designHeight:
+ *
+ *   idle  design 288×35  → --u = 100vh / 35
+ *   music design 371×184 → --m = 100vh / 184
+ *
+ * Each var is exact in its own mode (the viewport height always matches
+ * the active design), so every length below is resolution-independent.
+ */
+
+@font-face {
+  font-family: 'SF Pro';
+  src: url('fonts/sf_medium.ttf') format('truetype');
+  font-weight: 400 550;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'SF Pro';
+  src: url('fonts/sf_bold.ttf') format('truetype');
+  font-weight: 560 850;
+  font-style: normal;
+}
+
+:root {
+  --u: calc(100vh / 35);           /* idle design pixel  */
+  --m: calc(100vh / 184);          /* music design pixel */
+  font-family: 'Inter', 'SF Pro', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0 }
+[hidden] { display: none !important }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+  cursor: default;
+}
+
+.view { width: 100%; height: 100% }
+
+/* ══ IDLE — 288×35 black pill, centered icon + coords ══════════════ */
+#idle {
+  background: #000;
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Text is the centered element: 1fr | text | 1fr grid, icon hugs text's left */
+.idle-row {
+  align-self: stretch;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 1:1 black disc (black-on-black; only the white icon reads) */
+.idle-avatar {
+  grid-column: 1;
+  justify-self: end;
+  width: calc(44 * var(--u));
+  height: calc(44 * var(--u));
+  background: #000;
+  border-radius: calc(22 * var(--u));
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+}
+.idle-avatar svg { width: calc(22 * var(--u)); height: calc(22 * var(--u)) }
+
+.idle-text {
+  grid-column: 2;
+  padding-left: calc(12 * var(--u));
+  text-align: center;
+  color: #6B7280;
+  font-size: calc(12 * var(--u));
+  font-weight: 590;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ══ MUSIC — 371×184 black card ════════════════════════════════════ */
+#music {
+  background: #000;
+  border-radius: calc(42 * var(--m));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: calc(14 * var(--m));
+  padding: calc(22 * var(--m)) calc(24 * var(--m)) calc(19 * var(--m)) calc(24 * var(--m));
+}
+
+/* Row 1: art + title/artist + waveform */
+.np-row {
+  align-self: stretch;
+  display: inline-flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: calc(12 * var(--m));
+  overflow: hidden;
+}
+.np-art {
+  width: calc(48 * var(--m));
+  height: calc(48 * var(--m));
+  border-radius: calc(9 * var(--m));
+  object-fit: cover;
+  background: #333336;
+  flex-shrink: 0;
+}
+.np-copy {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: calc(4 * var(--m));
+}
+.np-title {
+  align-self: stretch;
+  color: #fff;
+  font-size: calc(15 * var(--m));
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-artist {
+  align-self: stretch;
+  color: #8E8E93;
+  font-size: calc(13 * var(--m));
+  font-weight: 400;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-wave {
+  width: calc(27 * var(--m));
+  height: calc(26 * var(--m));
+  flex-shrink: 0;
+}
+
+/* Row 2: position · progress bar · remaining */
+.np-progress {
+  align-self: stretch;
+  display: inline-flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: calc(9 * var(--m));
+  overflow: hidden;
+}
+.np-time {
+  color: #8E8E93;
+  font-size: calc(10 * var(--m));
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.np-track {
+  flex: 1 1 0;
+  height: calc(4 * var(--m));
+  background: #333336;
+  border-radius: calc(2 * var(--m));
+  overflow: hidden;
+  display: flex;
+}
+.np-fill {
+  height: 100%;
+  background: #C9C9CE;
+  border-radius: calc(2 * var(--m));
+}
+
+/* Row 3: transport controls + output icon */
+.np-controls {
+  align-self: stretch;
+  height: calc(37 * var(--m));
+  display: inline-flex;
+  justify-content: space-between;
+  align-items: center;
+  overflow: hidden;
+}
+.np-spacer { width: calc(25 * var(--m)); height: calc(24 * var(--m)) }
+.np-buttons {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: calc(31 * var(--m));
+}
+.np-btn { display: block }
+#npPause { width: calc(29 * var(--m)); height: calc(29 * var(--m)) }
+#npPlay  { width: calc(29 * var(--m)); height: calc(29 * var(--m)) }
+.np-airplay {
+  width: calc(21 * var(--m));
+  height: calc(21 * var(--m));
+  position: relative;
+}

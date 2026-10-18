@@ -1,6 +1,7 @@
 package me.alpha432.oxevy;
 
 import me.alpha432.oxevy.manager.*;
+import me.alpha432.oxevy.model.CosmeticModelLoader;
 import me.alpha432.oxevy.network.LocalAssetServer;
 import me.alpha432.oxevy.network.OxevyNetworkManager;
 import me.alpha432.oxevy.sound.OxevySounds;
@@ -47,10 +48,14 @@ public class Oxevy implements ModInitializer, ClientModInitializer {
     public static TargetManager targetManager;
     public static CapeManager capeManager;
     public static OxevyUsersManager oxevyUsersManager;
+    public static AccountManager accountManager;
+    public static ProxyManager proxyManager;
     public static ModDataManager modDataManager;
 
     @Override
     public void onInitialize() {
+        me.alpha432.oxevy.util.SplashScreen.show(2000);
+
         LOGGER.info("Pre-initializing {} v{}",
                 BuildConfig.NAME, BuildConfig.VERSION);
         configManager = new ConfigManager();
@@ -61,6 +66,8 @@ public class Oxevy implements ModInitializer, ClientModInitializer {
         positionManager = new PositionManager();
         friendManager = new FriendManager();
         oxevyUsersManager = new OxevyUsersManager();
+        accountManager = new AccountManager();
+        proxyManager = new ProxyManager();
         modDataManager = new ModDataManager();
         colorManager = new ColorManager();
         commandManager = new CommandManager();
@@ -78,21 +85,34 @@ public class Oxevy implements ModInitializer, ClientModInitializer {
 
         long startTime = System.nanoTime();
 
+        // Register cosmetic model loader
+        CosmeticModelLoader.register();
+
         OxevySounds.init();
         eventManager.init();
         commandManager.init();
         moduleManager.init();
         friendManager.init();
         oxevyUsersManager.init();
+        accountManager.init();
+        proxyManager.init();
         OxevyNetworkManager.init();
         LocalAssetServer.start();
+        initMcef();
 
         configManager.addConfig(capeManager);
         configManager.load();
         colorManager.init();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             ClickGuiWebBridge.stop();
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.isSameThread()) {
+                me.alpha432.oxevy.features.gui.WebClickGuiScreen.shutdownBrowser();
+            } else {
+                mc.execute(me.alpha432.oxevy.features.gui.WebClickGuiScreen::shutdownBrowser);
+            }
             SelfCosmeticsManager.onGameShutdown();
+            CosmeticModelLoader.getInstance().close();
             configManager.save();
         }));
 
@@ -102,6 +122,18 @@ public class Oxevy implements ModInitializer, ClientModInitializer {
 
         LOGGER.info("Initialized {} in {}ms",
                 BuildConfig.NAME, (endTime - startTime) / 1000000.0);
+    }
+
+    private static void initMcef() {
+        try {
+            if (net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("mcef-modern")) {
+                net.dimaskama.mcef.api.MCEFApi.initialize();
+                // Preload WebClickGui browser for instant open
+                Minecraft.getInstance().execute(me.alpha432.oxevy.features.gui.WebClickGuiScreen::ensureBrowserInitialized);
+            }
+        } catch (Throwable t) {
+            LOGGER.warn("Could not start MCEF: {}", t.toString());
+        }
     }
 
     private static void checkHwidBan() {

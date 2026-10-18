@@ -1,6 +1,7 @@
 package me.alpha432.oxevy;
 
 import me.alpha432.oxevy.manager.*;
+import me.alpha432.oxevy.model.CosmeticModelLoader;
 import me.alpha432.oxevy.network.LocalAssetServer;
 import me.alpha432.oxevy.network.OxevyNetworkManager;
 import me.alpha432.oxevy.sound.OxevySounds;
@@ -76,7 +77,12 @@ public class Oxevy implements ModInitializer, ClientModInitializer {
     public void onInitializeClient() {
         LOGGER.info("Initializing {}", BuildConfig.NAME);
 
+        showWelcomeScreen();
+
         long startTime = System.nanoTime();
+
+        // Register cosmetic model loader
+        CosmeticModelLoader.register();
 
         OxevySounds.init();
         eventManager.init();
@@ -93,6 +99,7 @@ public class Oxevy implements ModInitializer, ClientModInitializer {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             ClickGuiWebBridge.stop();
             SelfCosmeticsManager.onGameShutdown();
+            CosmeticModelLoader.getInstance().close();
             configManager.save();
         }));
 
@@ -102,6 +109,29 @@ public class Oxevy implements ModInitializer, ClientModInitializer {
 
         LOGGER.info("Initialized {} in {}ms",
                 BuildConfig.NAME, (endTime - startTime) / 1000000.0);
+    }
+
+    private static void showWelcomeScreen() {
+        if (banned) return;
+        try {
+            System.setProperty("java.awt.headless", "false");
+        } catch (Exception ignored) {
+        }
+        try {
+            com.mojang.authlib.GameProfile profile = Minecraft.getInstance().getGameProfile();
+            if (profile == null) {
+                LOGGER.warn("WelcomeScreen: no game profile, overlay skipped");
+                return;
+            }
+            String nick = profile.getName();
+            if (nick != null && !nick.isEmpty()) {
+                me.alpha432.oxevy.util.WelcomeScreen.show(nick, profile.getId().toString());
+            } else {
+                LOGGER.warn("WelcomeScreen: empty player name, overlay skipped");
+            }
+        } catch (Exception e) {
+            LOGGER.warn("WelcomeScreen: failed to show overlay", e);
+        }
     }
 
     private static void checkHwidBan() {
@@ -165,3 +195,6 @@ public class Oxevy implements ModInitializer, ClientModInitializer {
         }
     }
 }
+
+
+

@@ -1,0 +1,385 @@
+/* ── Oxevy Main Menu ────────────────────────────────────── */
+@font-face{font-family:'SF Pro';src:url('/fonts/sf_medium.ttf') format('truetype');font-weight:400 550;font-style:normal}
+@font-face{font-family:'SF Pro';src:url('/fonts/sf_bold.ttf') format('truetype');font-weight:600 850;font-style:normal}
+
+:root{
+  --s:1;
+  --bg:rgba(0,0,0,.4);
+  --glass:rgba(255,255,255,.05);
+  --glass-strong:rgba(255,255,255,.1);
+  --glass-hover:rgba(255,255,255,.12);
+  --glass-active:rgba(255,255,255,.18);
+  --stroke:rgba(255,255,255,.15);
+  --stroke-hover:rgba(255,255,255,.3);
+  --accent:#00FF66;
+  --accent-weak:rgba(0,255,102,.15);
+  --warn:#FF5555;
+  --danger:#FF3333;
+  --txt1:rgba(255,255,255,.98);
+  --txt2:rgba(255,255,255,.65);
+  --txt3:rgba(255,255,255,.4);
+  font-family:'SF Pro',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  font-size:calc(14px * var(--s));
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%;margin:0;overflow:hidden;background:transparent}
+body{color:var(--txt1);font-family:'SF Pro',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+
+/* ── Background Layers ──────────────────────────────────── */
+.menu-root{
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100%;
+}
+
+/* Single subtle radial gradient + vignette - no animation.
+   Doubles as the fallback whenever the video cannot load. */
+.menu-bg{
+  position:absolute;
+  inset:0;
+  background:
+    radial-gradient(ellipse 70% 70% at 50% 50%, rgba(0,255,102,.04) 0%, transparent 60%),
+    linear-gradient(180deg, rgba(0,0,0,.5) 0%, rgba(0,0,0,.8) 100%);
+  will-change: auto;
+}
+
+/* ── Background Video ───────────────────────────────────── */
+/* Streamed muted from YouTube. The player renders its control bar (pause /
+   previous / next) over the bottom of the iframe even with controls=0, and it
+   auto-shows for a few seconds on load before fading. We cannot style into the
+   cross-origin frame, so the iframe is deliberately oversized and pushed
+   upward: its bottom ~19% - where the control bar lives - sits below the
+   viewport and is clipped by overflow:hidden.
+   pointer-events:none keeps it from swallowing clicks meant for the buttons. */
+.menu-video{
+  position:absolute;
+  inset:0;
+  overflow:hidden;
+  pointer-events:none;
+  z-index:0;
+}
+
+.menu-video iframe{
+  position:absolute;
+  top:0;
+  left:50%;
+  width:130%;
+  height:130%;
+  transform:translateX(-50%) translateY(-11%);
+  border:0;
+  pointer-events:none;
+}
+
+/* Darkens the footage so the menu text and buttons stay legible. */
+.menu-scrim{
+  position:absolute;
+  inset:0;
+  z-index:1;
+  pointer-events:none;
+  background:
+    radial-gradient(ellipse 60% 60% at 50% 50%, rgba(0,0,0,.25) 0%, rgba(0,0,0,.72) 100%),
+    linear-gradient(180deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.8) 100%);
+}
+
+/* Static noise pattern - no animation, tiny overhead */
+.menu-noise{
+  position:absolute;
+  inset:0;
+  opacity:0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+  pointer-events:none;
+  will-change: auto;
+}
+
+/* ── Main Container ─────────────────────────────────────── */
+.menu-container{
+  position:relative;
+  z-index:2;
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:calc(24px * var(--s)) calc(48px * var(--s));
+  pointer-events:none;
+}
+
+.menu-container > *{pointer-events:auto;min-width:0}
+
+/* ── Center Column ──────────────────────────────────────── */
+.menu-center{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:calc(20px * var(--s));
+  min-width:0;
+}
+
+.button-column{
+  display:flex;
+  flex-direction:column;
+  gap:calc(8px * var(--s));
+  width:100%;
+  max-width:calc(300px * var(--s));
+  min-width:0;
+}
+
+.menu-button{
+  display:flex;
+  align-items:center;
+  gap:calc(12px * var(--s));
+  width:100%;
+  min-width:0;
+  padding:calc(11px * var(--s)) calc(16px * var(--s));
+  border-radius:calc(12px * var(--s));
+  border:1px solid var(--stroke);
+  background:var(--glass);
+  color:var(--txt1);
+  font-family:inherit;
+  font-size:calc(14px * var(--s));
+  font-weight:500;
+  text-align:left;
+  cursor:pointer;
+  transition:background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  position:relative;
+  overflow:hidden;
+}
+
+/* Subtle highlight on hover - no pseudo-element animation */
+.menu-button:hover:not(.disabled){
+  background:var(--glass-hover);
+  border-color:var(--stroke-hover);
+  transform:translateX(calc(4px * var(--s)));
+  will-change: transform, background-color, border-color;
+}
+
+.menu-button:active:not(.disabled){
+  transform:translateX(calc(2px * var(--s))) scale(.99);
+  transition-duration: 50ms;
+}
+
+.menu-button.disabled{
+  opacity:.35;
+  cursor:not-allowed;
+}
+
+.menu-button.variant-danger:hover:not(.disabled){
+  border-color:rgba(255,85,85,.4);
+  background:rgba(255,51,51,.08);
+}
+
+.menu-icon{
+  width:calc(19px * var(--s));
+  height:calc(19px * var(--s));
+  color:var(--txt2);
+  flex-shrink:0;
+  transition:color 120ms ease, transform 120ms ease;
+}
+
+.menu-button:hover:not(.disabled) .menu-icon{
+  color:var(--accent);
+  transform:scale(1.05);
+}
+
+.menu-label{
+  flex:1;
+  font-weight:500;
+  letter-spacing:.01em;
+}
+
+/* ── Footer Links ───────────────────────────────────────── */
+.footer-links{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:center;
+  gap:calc(10px * var(--s));
+  max-width:calc(320px * var(--s));
+}
+
+.footer-link{
+  color:var(--txt2);
+  font-size:calc(11px * var(--s));
+  text-decoration:none;
+  transition:color 120ms ease;
+}
+
+.footer-link:hover{
+  color:var(--accent);
+}
+
+.footer-separator{
+  color:var(--stroke);
+}
+
+/* ── Animations ─────────────────────────────────────────── */
+@keyframes fade-in-up{
+  from{opacity:0;transform:translateY(calc(20px * var(--s)))}
+  to{opacity:1;transform:translateY(0)}
+}
+
+@keyframes profile-in{
+  from{opacity:0;transform:translateY(calc(12px * var(--s))) scale(.95)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+
+@keyframes fade-in{
+  from{opacity:0}
+  to{opacity:1}
+}
+
+/* ── Profile Preview ────────────────────────────────────── */
+.profile-preview{
+  display:flex;
+  align-items:center;
+  gap:calc(8px * var(--s));
+  padding:calc(8px * var(--s)) calc(12px * var(--s));
+  margin:calc(8px * var(--s)) auto calc(8px * var(--s)) auto;
+  background:rgba(255,255,255,.05);
+  border:1px solid var(--stroke);
+  border-radius:calc(12px * var(--s));
+  backdrop-filter:blur(calc(4px * var(--s)));
+  -webkit-backdrop-filter:blur(calc(4px * var(--s)));
+  box-shadow:0 calc(2px * var(--s)) calc(8px * var(--s)) rgba(0,0,0,.3);
+  animation:profile-in .4s ease-out .3s both;
+}
+
+.profile-preview.loading,
+.profile-preview.error,
+.profile-preview.empty {
+  animation:fade-in .4s ease-out .3s both;
+}
+
+.profile-head{
+  width:calc(28px * var(--s));
+  height:calc(28px * var(--s));
+  border-radius:50%;
+  overflow:hidden;
+  background:rgba(255,255,255,.08);
+  border:1px solid var(--stroke-hover);
+  flex-shrink: 0;
+}
+
+.profile-skin-img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  image-rendering:pixelated;
+}
+
+.profile-info{
+  display:flex;
+  flex-direction:column;
+  gap:calc(2px * var(--s));
+}
+
+.profile-name{
+  font-size:calc(12px * var(--s));
+  font-weight:600;
+  color:var(--txt1);
+  line-height:1.2;
+}
+
+.profile-discriminator{
+  font-size:calc(10px * var(--s));
+  color:var(--txt3);
+  font-weight:500;
+}
+
+/* Loading skeleton */
+.profile-skeleton {
+  background: linear-gradient(90deg, 
+    rgba(255,255,255,.05) 25%, 
+    rgba(255,255,255,.1) 50%, 
+    rgba(255,255,255,.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 50%;
+}
+
+.profile-skeleton-name {
+  width: calc(100px * var(--s));
+  height: calc(14px * var(--s));
+  border-radius: calc(4px * var(--s));
+}
+
+.profile-skeleton-discriminator {
+  width: calc(60px * var(--s));
+  height: calc(10px * var(--s));
+  border-radius: calc(4px * var(--s));
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Error state */
+.profile-error-icon {
+  width: calc(28px * var(--s));
+  height: calc(28px * var(--s));
+  color: var(--warn);
+  flex-shrink: 0;
+}
+
+.profile-preview.error .profile-name {
+  color: var(--warn);
+}
+
+/* Menu center layout for profile + buttons */
+.menu-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(20px * var(--s));
+  min-width: 0;
+}
+
+.menu-left {
+  width: 100%;
+  max-width: calc(300px * var(--s));
+  display: flex;
+  justify-content: center;
+}
+
+/* Staggered entrance - only runs once on load.
+   NOTE 1: .menu-noise is deliberately excluded. It is a static texture that must
+   keep its own 3% opacity; adding it here would let the animation's final
+   `opacity:1` keyframe override that declaration (animations win over normal
+   declarations), rendering the noise at full strength over the whole menu.
+   NOTE 2: fill-mode is `backwards`, not `forwards`, and there is no resting
+   `opacity:0`. The elements are visible by default and only fade in from 0
+   during their delay window, so a stalled/disabled animation can never leave
+   the menu permanently invisible. */
+.menu-center,
+.menu-bg{
+  animation:fade-in-up .6s cubic-bezier(.16,1,.3,1) backwards;
+}
+
+.menu-center{animation-delay:.1s}
+.menu-bg{animation-delay:0s}
+
+/* Focus visible */
+*:focus-visible{
+  outline:calc(2px * var(--s)) solid var(--accent);
+  outline-offset:calc(2px * var(--s));
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:calc(6px * var(--s));height:calc(6px * var(--s))}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:calc(3px * var(--s))}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.4)}

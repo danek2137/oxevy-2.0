@@ -4,6 +4,7 @@ import me.alpha432.oxevy.event.impl.render.Render3DEvent;
 import me.alpha432.oxevy.features.modules.Module;
 import me.alpha432.oxevy.features.settings.Setting;
 import me.alpha432.oxevy.util.render.RenderUtil;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.phys.AABB;
@@ -11,6 +12,8 @@ import net.minecraft.world.phys.AABB;
 import java.awt.Color;
 
 public class ChamsModule extends Module {
+
+    public static final Identifier BLANK = Identifier.fromNamespaceAndPath("oxevy", "textures/blank.png");
 
     public Setting<Boolean> players = bool("Players", false);
     public Setting<Boolean> playerTexture = bool("PlayerTexture", false);
@@ -22,6 +25,7 @@ public class ChamsModule extends Module {
     public Setting<Double> crystalScale = num("CrystalScale", 0.6, 0.0, 3.0);
 
     public Setting<Boolean> hand = bool("Hand", false);
+    public Setting<Boolean> handTexture = bool("HandTexture", false);
     public Setting<Color> handColor = color("HandColor", 198, 135, 254, 150);
 
     public ChamsModule() {

@@ -18,25 +18,21 @@ public class StringComponent extends SettingComponent {
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         boolean hovered = isHovered(mouseX, mouseY);
         
-        // Background
-        RenderUtil.rect(context, x, y, x + width, y + height, 0x11FFFFFF);
+        // Background - consistent with other components & modules in clickgui
+        RenderUtil.rect(context, x, y, x + width, y + height, hovered ? 0xFF1E1E30 : 0xFF1A1A28);
         
-        context.drawString(CustomFont.font(), setting.getName(), x + 5, y + 2, 0xFFBBBBBB);
+        context.drawString(CustomFont.font(), setting.getName(), x + 6, y + 2, 0xFFE6E6E6);
         
         // Input box background
         int boxY = y + height - 12;
-        RenderUtil.rect(context, x + 5, boxY, x + width - 5, boxY + 10, focused ? 0x22FFFFFF : 0x11FFFFFF);
+        RenderUtil.rect(context, x + 6, boxY, x + width - 6, boxY + 10, focused ? 0xFF2A2A3C : 0xFF0E0E18);
         
         // Value
         String value = (String) setting.getValue();
         String displayText = value + (focused ? (System.currentTimeMillis() % 1000 > 500 ? "_" : "") : "");
         if (value.isEmpty() && !focused) displayText = "Type...";
         
-        context.drawString(CustomFont.font(), displayText, x + 10, boxY + 1, focused ? 0xFFFFFFFF : 0xFF888888);
-        
-        if (hovered) {
-            RenderUtil.rect(context, x, y, x + width, y + height, 0x11FFFFFF);
-        }
+        context.drawString(CustomFont.font(), displayText, x + 10, boxY + 1, focused ? 0xFFFFFFFF : 0xFFAAAAAA);
     }
     
     @Override

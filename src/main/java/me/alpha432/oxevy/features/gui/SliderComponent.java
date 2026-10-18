@@ -26,17 +26,18 @@ public class SliderComponent extends SettingComponent {
         float percent = (value - min) / (max - min);
 
         Color accent = ClickGuiModule.getInstance().color.getValue();
-        RenderUtil.rect(context, x, y, x + width, y + height, isHovered(mouseX, mouseY) ? 0x12FFFFFF : 0x08FFFFFF);
+        boolean hovered = isHovered(mouseX, mouseY);
+        RenderUtil.rect(context, x, y, x + width, y + height, hovered ? 0xFF1E1E30 : 0xFF1A1A28);
 
         int textY = y + 1;
-        context.drawString(CustomFont.font(), setting.getName(), x + 4, textY, 0xFFBBBBBB);
+        context.drawString(CustomFont.font(), setting.getName(), x + 6, textY, 0xFFE6E6E6);
 
         String valueText = formatValue((Number) setting.getValue());
-        context.drawString(CustomFont.font(), valueText, x + width - 4 - CustomFont.font().width(valueText), textY, accent.getRGB());
+        context.drawString(CustomFont.font(), valueText, x + width - 6 - CustomFont.font().width(valueText), textY, accent.getRGB());
 
-        int trackX = x + 4;
-        int trackY = y + height - 5;
-        int trackWidth = width - 8;
+        int trackX = x + 6;
+        int trackY = y + height - 4;
+        int trackWidth = width - 12;
         int activeTrack = new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 200).getRGB();
         int knobX = trackX + Math.round(percent * trackWidth);
 
@@ -51,7 +52,7 @@ public class SliderComponent extends SettingComponent {
     private void updateValue(double mouseX) {
         float min = ((Number) setting.getMin()).floatValue();
         float max = ((Number) setting.getMax()).floatValue();
-        double percent = Math.max(0, Math.min(1, (mouseX - (x + 4)) / (width - 8)));
+        double percent = Math.max(0, Math.min(1, (mouseX - (x + 6)) / (width - 12)));
         float val = (float) (min + percent * (max - min));
         if (setting.getValue() instanceof Integer) setting.setValue(Math.round(val));
         else if (setting.getValue() instanceof Float) setting.setValue((float) (Math.round(val * 10.0) / 10.0));

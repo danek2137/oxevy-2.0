@@ -67,6 +67,7 @@ public class AutoCobwebModule extends Module {
 
         for (Player player : mc.level.players()) {
             if (player == mc.player) continue;
+            if (me.alpha432.oxevy.util.entity.GhostPlayerEntity.isGhost(player)) continue;
             if (Oxevy.friendManager.isFriend(player)) continue;
 
             double dist = mc.player.distanceTo(player);

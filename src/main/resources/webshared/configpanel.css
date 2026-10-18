@@ -1,0 +1,301 @@
+/* ── Oxevy ConfigPanel styles (shared) ─────────────────────────────────────
+   Used by the main menu overlay and the ClickGui "Configs" tab. The panel is
+   themed through CSS custom properties that BOTH hosts define on their own
+   root: --s, --accent, --txt1..3, --stroke, --glass, --glass-hover.
+   The ClickGui lacks three more that this sheet uses (--glass-strong,
+   --stroke-hover, --danger); its host wrapper supplies them (see
+   .configs-host in webclickgui/style.css). NOTE: never "fall back" by
+   re-declaring --x:var(--x,...) on an element inside the panel - a custom
+   property referencing itself is a cycle, Chromium then computes it as
+   guaranteed-invalid and every calc(Npx * var(--s)) in the panel dies
+   (that's how the panel lost its rounded corners once already). */
+
+.cfg-win{
+  position:relative;width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;
+  border-radius:calc(22px * var(--s));
+  border:1px solid rgba(255,255,255,.22);
+  /* Frosted glass: a light tint + backdrop blur. The tint stays thin (.36-.46)
+     so the blurred menu reads through it - heavier alpha is what made the
+     panel look opaque last time. NOTE: blurring the playing menu video costs
+     a per-frame backdrop snapshot in mcef's software rasteriser; acceptable
+     here because the panel is only open on demand. */
+  background:linear-gradient(165deg,rgba(30,36,52,.36) 0%,rgba(21,26,40,.40) 55%,rgba(14,17,26,.46) 100%);
+  backdrop-filter:blur(18px) saturate(1.5);
+  -webkit-backdrop-filter:blur(18px) saturate(1.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.24),
+    inset 0 -1px 0 rgba(255,255,255,.06),
+    0 calc(28px * var(--s)) calc(60px * var(--s)) rgba(0,0,0,.55);
+}
+/* Top sheen. */
+.cfg-win::before{
+  content:"";position:absolute;inset:0 0 auto 0;height:50%;pointer-events:none;z-index:1;
+  background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,0));
+  border-radius:calc(22px * var(--s)) calc(22px * var(--s)) 0 0;
+}
+.cfg-header{
+  position:relative;z-index:2;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;
+  gap:calc(8px * var(--s));padding:calc(13px * var(--s)) calc(16px * var(--s));
+  border-bottom:1px solid rgba(255,255,255,.10);
+}
+.cfg-title{display:flex;align-items:baseline;gap:calc(8px * var(--s));min-width:0}
+.cfg-header h1{font-size:calc(15px * var(--s));font-weight:600;letter-spacing:-.01em;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+.cfg-count{
+  font-size:calc(10px * var(--s));font-weight:600;color:var(--txt3);
+  background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.12);
+  padding:calc(1px * var(--s)) calc(6px * var(--s));border-radius:calc(6px * var(--s));white-space:nowrap;
+}
+.cfg-close{
+  width:calc(26px * var(--s));height:calc(26px * var(--s));border-radius:calc(9px * var(--s));
+  display:grid;place-items:center;color:var(--txt3);font-size:calc(13px * var(--s));flex-shrink:0;
+  background:transparent;border:0;outline:none;cursor:pointer;
+  transition:background 120ms,color 120ms,transform 120ms;
+}
+.cfg-close:hover{background:rgba(255,255,255,.10);color:var(--txt1)}
+.cfg-close:active{transform:scale(.94)}
+.cfg-body{
+  position:relative;z-index:2;flex:1;min-height:0;display:flex;flex-direction:column;
+  gap:calc(10px * var(--s));padding:calc(14px * var(--s)) calc(16px * var(--s));
+}
+.cfg-current{font-size:calc(12px * var(--s));color:var(--txt3)}
+.cfg-current b{color:var(--txt1);font-weight:600}
+/* Save row */
+.cfg-add{
+  display:flex;gap:calc(8px * var(--s));align-items:center;
+  padding:calc(8px * var(--s));border-radius:calc(13px * var(--s));
+  background:rgba(0,0,0,.20);border:1px solid rgba(255,255,255,.10);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.28);
+  transition:border-color 150ms,box-shadow 150ms;
+}
+.cfg-add:focus-within{border-color:rgba(0,255,102,.36);box-shadow:inset 0 1px 2px rgba(0,0,0,.28),0 0 0 calc(3px * var(--s)) rgba(0,255,102,.10)}
+.cfg-input{
+  flex:1;min-width:0;padding:calc(4px * var(--s)) calc(6px * var(--s));font-size:calc(12px * var(--s));
+  background:transparent;border:0;outline:none;color:var(--txt1);font-family:inherit;
+}
+.cfg-input::placeholder{color:var(--txt3)}
+.cfg-msg{font-size:calc(11px * var(--s));color:var(--accent);min-height:calc(14px * var(--s))}
+.cfg-msg.err{color:var(--danger)}
+/* Config list */
+.cfg-list{
+  display:flex;flex-direction:column;gap:calc(6px * var(--s));
+  overflow-y:auto;min-height:0;flex:1;padding-right:calc(2px * var(--s));
+}
+.cfg-row{
+  position:relative;display:flex;align-items:center;gap:calc(10px * var(--s));
+  padding:calc(9px * var(--s)) calc(10px * var(--s));border-radius:calc(12px * var(--s));
+  background:var(--glass);border:1px solid transparent;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.15);
+  transition:background 120ms,border-color 120ms;
+}
+.cfg-row:hover{background:var(--glass-hover);border-color:rgba(255,255,255,.10)}
+.cfg-row.on{background:var(--glass-strong);border-color:var(--stroke)}
+.cfg-row.on::before{
+  content:"";position:absolute;left:0;top:calc(8px * var(--s));bottom:calc(8px * var(--s));
+  width:calc(3px * var(--s));border-radius:0 calc(3px * var(--s)) calc(3px * var(--s)) 0;
+  background:var(--accent);box-shadow:0 0 calc(8px * var(--s)) rgba(0,255,102,.55);
+}
+.cfg-name{
+  flex:1;min-width:0;font-size:calc(13px * var(--s));color:var(--txt2);
+  text-shadow:0 1px 2px rgba(0,0,0,.35);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.cfg-row.on .cfg-name{color:var(--txt1);font-weight:600}
+.cfg-badge{
+  font-size:calc(9px * var(--s));font-weight:700;color:var(--accent);
+  background:rgba(0,255,102,.16);border:1px solid rgba(0,255,102,.32);
+  padding:calc(2px * var(--s)) calc(6px * var(--s));
+  border-radius:calc(6px * var(--s));line-height:calc(12px * var(--s));flex-shrink:0;
+}
+.cfg-actions{display:flex;gap:calc(6px * var(--s));flex-shrink:0}
+.cfg-btn{
+  padding:calc(5px * var(--s)) calc(11px * var(--s));border-radius:calc(9px * var(--s));
+  font-size:calc(11px * var(--s));font-weight:600;flex-shrink:0;cursor:pointer;
+  background:var(--glass-strong);border:1px solid rgba(255,255,255,.15);color:var(--txt1);
+  transition:background 120ms,border-color 120ms,transform 120ms,opacity 120ms;
+}
+.cfg-btn:hover:not(:disabled){background:var(--glass-hover);border-color:var(--stroke-hover)}
+.cfg-btn:active:not(:disabled){transform:scale(.96)}
+.cfg-btn:disabled{opacity:.4;cursor:not-allowed}
+.cfg-btn.primary{background:rgba(0,255,102,.20);border-color:rgba(0,255,102,.42);color:var(--txt1)}
+.cfg-btn.primary:hover:not(:disabled){background:rgba(0,255,102,.30);border-color:rgba(0,255,102,.62)}
+.cfg-btn.danger{background:rgba(255,85,85,.13);border-color:rgba(255,85,85,.30);color:var(--txt1)}
+.cfg-btn.danger:hover:not(:disabled){background:rgba(255,85,85,.24);border-color:rgba(255,85,85,.50)}
+.cfg-empty{
+  font-size:calc(12px * var(--s));color:var(--txt3);text-align:center;
+  padding:calc(22px * var(--s)) calc(14px * var(--s));border-radius:calc(13px * var(--s));
+  background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.14);
+}
+
+/* ── Section rail ────────────────────────────────────────────────────── */
+.cfg-shell{
+  position:relative;z-index:2;flex:1;min-height:0;display:flex;
+}
+.cfg-rail{
+  display:flex;flex-direction:column;gap:calc(6px * var(--s));flex-shrink:0;
+  padding:calc(12px * var(--s)) calc(7px * var(--s));
+  border-right:1px solid rgba(255,255,255,.08);
+}
+.cfg-tab{
+  display:flex;flex-direction:column;align-items:center;gap:calc(4px * var(--s));
+  width:calc(52px * var(--s));padding:calc(8px * var(--s)) calc(4px * var(--s));
+  border-radius:calc(11px * var(--s));
+  font-size:calc(10px * var(--s));font-weight:600;cursor:pointer;color:var(--txt3);
+  background:transparent;border:0;outline:none;
+  transition:background 130ms,color 130ms,box-shadow 130ms;
+}
+.cfg-tab svg{opacity:.85;transition:opacity 130ms}
+.cfg-tab:hover{color:var(--txt1);background:rgba(255,255,255,.06)}
+.cfg-tab:hover svg{opacity:1}
+.cfg-tab.on{
+  background:rgba(0,255,102,.12);color:var(--txt1);
+  box-shadow:inset 0 0 0 1px rgba(0,255,102,.30);
+}
+.cfg-tab.on svg{opacity:1;color:var(--accent)}
+
+/* ── Roblox-style game tiles ────────────────────────────────────────── */
+.cfg-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:calc(10px * var(--s));
+  overflow-y:auto;min-height:0;flex:1;
+  padding:calc(2px * var(--s)) calc(4px * var(--s)) calc(2px * var(--s)) 0;
+  align-content:start;
+}
+.cfg-card{
+  position:relative;display:flex;flex-direction:column;overflow:hidden;
+  border-radius:calc(14px * var(--s));
+  background:var(--glass);border:1px solid rgba(255,255,255,.10);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 calc(4px * var(--s)) calc(14px * var(--s)) rgba(0,0,0,.28);
+  transition:transform 160ms cubic-bezier(.22,1,.36,1),border-color 160ms,box-shadow 160ms;
+}
+.cfg-card:hover{
+  transform:translateY(calc(-2px * var(--s)));
+  border-color:rgba(255,255,255,.24);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16), 0 calc(10px * var(--s)) calc(22px * var(--s)) rgba(0,0,0,.4);
+}
+.cfg-card.on{border-color:rgba(0,255,102,.45)}
+/* Thumbnail */
+.cfg-cover{
+  position:relative;display:grid;place-items:center;
+  aspect-ratio:16/10;overflow:hidden;
+}
+.cfg-cover::after{
+  content:"";position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 120%, rgba(0,0,0,.45), transparent 70%),
+    linear-gradient(180deg,rgba(255,255,255,.10),transparent 40%);
+  pointer-events:none;
+}
+.cfg-glyph{
+  font-size:calc(44px * var(--s));font-weight:800;letter-spacing:-.03em;
+  color:rgba(255,255,255,.85);text-shadow:0 calc(3px * var(--s)) calc(12px * var(--s)) rgba(0,0,0,.55);
+  transform:translateY(calc(-2px * var(--s)));
+  user-select:none;
+}
+.cfg-cover .cfg-badge{
+  position:absolute;top:calc(7px * var(--s));left:calc(7px * var(--s));z-index:2;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+}
+/* Hover action strip on the thumbnail, like a game's play buttons. */
+.cfg-cover-acts{
+  position:absolute;left:0;right:0;bottom:0;z-index:3;
+  display:flex;flex-wrap:wrap;gap:calc(5px * var(--s));justify-content:center;
+  padding:calc(8px * var(--s)) calc(6px * var(--s));
+  background:linear-gradient(180deg,transparent,rgba(0,0,0,.62) 55%);
+  opacity:0;transform:translateY(calc(6px * var(--s)));
+  transition:opacity 150ms,transform 150ms;
+}
+.cfg-card:hover .cfg-cover-acts,.cfg-card:focus-within .cfg-cover-acts{opacity:1;transform:none}
+.cfg-cover-acts .cfg-btn{
+  background:rgba(10,12,18,.72);border-color:rgba(255,255,255,.22);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  padding:calc(4px * var(--s)) calc(8px * var(--s));font-size:calc(10px * var(--s));
+}
+.cfg-cover-acts .cfg-btn:hover:not(:disabled){background:rgba(30,34,46,.86);border-color:rgba(255,255,255,.4)}
+.cfg-cover-acts .cfg-btn.primary{background:rgba(0,255,102,.28);border-color:rgba(0,255,102,.55)}
+.cfg-cover-acts .cfg-btn.primary:hover:not(:disabled){background:rgba(0,255,102,.42);border-color:rgba(0,255,102,.75)}
+.cfg-cover-acts .cfg-btn.danger{background:rgba(255,85,85,.24);border-color:rgba(255,85,85,.45)}
+.cfg-cover-acts .cfg-btn.danger:hover:not(:disabled){background:rgba(255,85,85,.38);border-color:rgba(255,85,85,.65)}
+/* Name plate under the thumbnail */
+.cfg-card-meta{
+  display:flex;align-items:baseline;justify-content:space-between;gap:calc(6px * var(--s));
+  padding:calc(8px * var(--s)) calc(10px * var(--s)) calc(9px * var(--s));
+}
+.cfg-card-name{
+  font-size:calc(12px * var(--s));font-weight:600;color:var(--txt1);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.35);
+}
+.cfg-card-sub{font-size:calc(10px * var(--s));color:var(--txt3);flex-shrink:0}
+/* Create form - lives inside the expanded "+" tile in the Load grid */
+.cfg-create{display:flex;flex-direction:column;gap:calc(10px * var(--s));flex:1;min-height:0}
+.cfg-import{
+  display:block;text-align:center;font-size:calc(11px * var(--s));color:var(--txt3);
+  padding:calc(9px * var(--s));border-radius:calc(11px * var(--s));cursor:pointer;
+  background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.16);
+  transition:background 130ms,border-color 130ms,color 130ms;
+}
+.cfg-import:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.3);color:var(--txt1)}
+.cfg-or{
+  text-align:center;font-size:calc(10px * var(--s));color:var(--txt3);
+  display:flex;align-items:center;gap:calc(8px * var(--s));
+}
+.cfg-or::before,.cfg-or::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.12)}
+.cfg-redeem{
+  display:flex;gap:calc(8px * var(--s));align-items:center;
+  padding:calc(8px * var(--s));border-radius:calc(13px * var(--s));
+  background:rgba(0,0,0,.20);border:1px solid rgba(255,255,255,.10);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.28);
+  transition:border-color 150ms,box-shadow 150ms;
+}
+.cfg-redeem:focus-within{border-color:rgba(0,255,102,.36);box-shadow:inset 0 1px 2px rgba(0,0,0,.28),0 0 0 calc(3px * var(--s)) rgba(0,255,102,.10)}
+.cfg-redeem .cfg-input{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:calc(11px * var(--s))}
+.cfg-grid .cfg-empty{grid-column:1 / -1}
+/* ── "+" tile: create a config from inside the Load grid ─────────────────
+   Collapsed it's the last tile of the grid, same 16/10 thumbnail shape as
+   the config cards so the row lines up; clicked it expands to span the
+   whole grid and shows the create form (name / import / redeem). */
+.cfg-new{border:1px dashed rgba(255,255,255,.26);cursor:pointer}
+.cfg-new:hover{border-color:rgba(0,255,102,.55);background:rgba(0,255,102,.05)}
+.cfg-new:focus-visible{outline:none;border-color:rgba(0,255,102,.65);box-shadow:0 0 0 calc(3px * var(--s)) rgba(0,255,102,.16)}
+.cfg-new-area{width:100%;aspect-ratio:16/10;display:grid;place-items:center}
+.cfg-new-plus{
+  font-size:calc(40px * var(--s));line-height:1;font-weight:300;
+  color:rgba(255,255,255,.55);transition:color 140ms,transform 140ms;
+}
+.cfg-new:hover .cfg-new-plus{color:var(--accent);transform:scale(1.08)}
+.cfg-new-open{
+  grid-column:1 / -1;cursor:default;padding:calc(14px * var(--s));
+  border-style:solid;border-color:rgba(255,255,255,.22);
+}
+.cfg-new-open:hover{transform:none;border-color:rgba(255,255,255,.22);background:var(--glass)}
+.cfg-new-open .cfg-create{gap:calc(9px * var(--s))}
+.cfg-new-cancel{position:absolute;top:calc(9px * var(--s));right:calc(9px * var(--s));z-index:3}
+
+/* ── Export sheet (copy / download the bundle) ───────────────────────── */
+.cfg-export{
+  position:absolute;inset:0;z-index:5;
+  display:flex;flex-direction:column;gap:calc(8px * var(--s));
+  padding:calc(14px * var(--s)) calc(16px * var(--s));
+  background:rgba(8,10,16,.72);
+  backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);
+  animation:wo-fade .16s ease-out;
+}
+.cfg-export-head{display:flex;align-items:center;justify-content:space-between;gap:calc(8px * var(--s))}
+.cfg-export-title{font-size:calc(13px * var(--s));font-weight:600;color:var(--txt1)}
+.cfg-export textarea{
+  flex:1;min-height:0;resize:none;outline:none;
+  padding:calc(9px * var(--s));border-radius:calc(11px * var(--s));
+  background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.14);
+  color:var(--txt2);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:calc(11px * var(--s));line-height:1.5;
+}
+.cfg-export textarea::selection{background:rgba(0,255,102,.3)}
+.cfg-export-row{display:flex;gap:calc(6px * var(--s));justify-content:flex-end}
+.cfg-export-code{display:flex;gap:calc(8px * var(--s));align-items:center}
+.cfg-export-code .cfg-input{
+  flex:1;min-width:0;padding:calc(6px * var(--s)) calc(8px * var(--s));
+  border-radius:calc(11px * var(--s));background:rgba(0,0,0,.35);
+  border:1px solid rgba(255,255,255,.14);color:var(--txt2);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:calc(10px * var(--s));
+}
+.cfg-export-code .cfg-input::selection{background:rgba(0,255,102,.3)}

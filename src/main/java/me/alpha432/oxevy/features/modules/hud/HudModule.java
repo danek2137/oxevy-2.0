@@ -45,12 +45,16 @@ public abstract class HudModule extends Module {
     }
 
     public float getX() {
-        return mc.getWindow().getGuiScaledWidth() * pos.getValue().x();
+        // Clamp X to 1%-99% to prevent modules from rendering off-screen
+        float clampedX = Math.max(0.01f, Math.min(0.99f, pos.getValue().x()));
+        return mc.getWindow().getGuiScaledWidth() * clampedX;
     }
 
     public float getY() {
         float heightWithChat = mc.getWindow().getGuiScaledHeight() - 14;
-        float baseY = mc.getWindow().getGuiScaledHeight() * pos.getValue().y();
+        // Clamp Y to minimum 1% from top to prevent modules from rendering off-screen
+        float clampedY = Math.max(pos.getValue().y(), 0.01f);
+        float baseY = mc.getWindow().getGuiScaledHeight() * clampedY;
         float combined = baseY + getHeight();
 
         if (mc.screen instanceof ChatScreen) {

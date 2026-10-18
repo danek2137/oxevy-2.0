@@ -4,99 +4,127 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Oxevy ClickGui</title>
-  <link rel="stylesheet" href="/style.css" />
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script crossorigin src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <link rel="stylesheet" href="/style.css?v=ASSET_V" />
+  <link rel="stylesheet" href="/shared/configpanel.css" />
+  <script src="/vendor/react.production.min.js"></script>
+  <script src="/vendor/react-dom.production.min.js"></script>
+  <script src="/vendor/babel.min.js"></script>
+  <script type="text/babel" src="/shared/configpanel.jsx"></script>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
-const { useState, useEffect, useCallback } = React;
+// The game renders the browser surface at physical framebuffer resolution and
+// passes the physical-vs-CSS scale as a URL fragment (#scale=2). Input events
+// arrive 1:1 in device pixels, so we must NOT zoom the page (CEF's OSR input
+// path ignores CSS zoom and hit-testing would drift). Instead the scale is
+// exposed as --s and every design size is multiplied by it per the stylesheet.
+//
+// The surface is exactly the window (CEF reports device scale 1), so the scale
+// is capped by what actually fits: the 620x420 window plus #root's 20px padding.
+// Without the cap a small window with gui scale 2 lays the page out at 2x and
+// the tab bar, footer and half the settings panel end up off-screen.
+(function(){
+  const m = (location.hash.match(/#scale=([\d.]+)/)) || [];
+  const base = m[1] ? Number(m[1]) : 1;
+  // Fraction of the framebuffer the host rasterises this page at (see
+  // WebClickGuiScreen.PAGE_SCALE). CSS pixels are page pixels, so anything
+  // that should be measured in *physical* window pixels must be divided by it.
+  const mR = (location.hash.match(/[#&]raster=([\d.]+)/)) || [];
+  const raster = mR[1] ? Number(mR[1]) : 1;
+  const DESIGN_W = 660, DESIGN_H = 480, COMPACT_W = 700;
+  let lastS = null, raf = 0;
+  const fit = () => {
+    // Compact layout is for genuinely narrow windows, decided in physical
+    // pixels: with a reduced raster the CSS viewport is smaller than the real
+    // window, so the old max-width:700px media query would flip wide windows
+    // into the mobile layout. Missing #raster= (full-resolution host) keeps
+    // the exact old behaviour.
+    document.documentElement.classList.toggle("compact", innerWidth / raster < COMPACT_W);
+    // Never grow past the design scale, but do shrink below it when the window
+    // is smaller than the design box: a slightly smaller ClickGui beats one
+    // whose tab bar and settings panel sit outside the surface.
+    const s = Math.max(0.6, Math.min(base, innerWidth / DESIGN_W, innerHeight / DESIGN_H));
+    // --s feeds virtually every rule in the stylesheet, so re-setting it forces
+    // a whole-page style recalc + repaint. Skip when unchanged and coalesce
+    // resize bursts into a single rAF.
+    if (s === lastS) return;
+    lastS = s;
+    document.documentElement.style.setProperty("--s", String(s));
+  };
+  window.addEventListener("resize", () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; fit(); }); });
+  fit();
+
+  // Restore the cached theme before React mounts. The palette/layout decide the
+  // very first paint, and the first /api/state poll (which carries the bridge's
+  // authoritative theme) is still a round-trip away, so without this the window
+  // would flash the default glass theme on every reopen. If nothing is cached
+  // (first run, storage blocked) the attributes stay unset and the stylesheet's
+  // default glass/top applies.
+  try {
+    const th = JSON.parse(localStorage.getItem("oxevy.cgui.theme"));
+    if (th && th.theme) {
+      document.documentElement.dataset.theme = String(th.theme).toLowerCase();
+      document.documentElement.dataset.layout = th.layout || "top";
+    }
+  } catch (e) { /* no cache yet or localStorage unavailable: keep CSS default */ }
+})();
+
+const { useState, useEffect, useCallback, useRef, useMemo, memo } = React;
+const POLL_MS = 5000;
 
 const API = {
+  _etag: null,
+  _rememberEtag(r) {
+    const tag = r.headers.get("ETag");
+    if (tag) API._etag = tag;
+  },
   async getState() {
-    const r = await fetch("/api/state");
+    // Conditional request: the bridge keeps the serialized state and answers
+    // with 304 when nothing changed, so an idle poll costs no JSON transfer and
+    // no React re-render at all.
+    const headers = {};
+    if (API._etag) headers["If-None-Match"] = API._etag;
+    const r = await fetch("/api/state", { headers, cache: "no-store" });
+    if (r.status === 304) return null;
     if (!r.ok) throw new Error(await r.text());
+    API._rememberEtag(r);
     return r.json();
   },
   async toggle(mod) {
     const r = await fetch("/api/module/toggle", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({module:mod}) });
+    API._rememberEtag(r);
     return r.json();
   },
   async setSetting(mod, setting, value) {
     const r = await fetch("/api/setting", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({module:mod, setting, value}) });
-    return r.json();
-  },
-  async getCapeState() {
-    const r = await fetch("/api/capes/state");
-    return r.json();
-  },
-  async getRepoCapes() {
-    const r = await fetch("/api/capes/repo");
-    return r.json();
-  },
-  async selectCape(opts) {
-    const r = await fetch("/api/cape/select", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(opts) });
+    API._rememberEtag(r);
     return r.json();
   }
 };
 
-function Sidebar({ categories, activeKey, onSelect, onCapeClick, showCape }) {
-  return (
-    <aside className="sidebar">
-      <div className="brand">
-        <div className="brand-mark">OX</div>
-      </div>
-      <div className="sidebar-list">
-        {categories.map(cat => (
-          <button key={cat.key} className={"sidebar-item"+(cat.key===activeKey?" active":"")} onClick={()=>onSelect(cat.key)} title={cat.name}>
-            <span style={{fontFamily:"Wexside",fontSize:20}}>{cat.icon||cat.name.slice(0,2).toUpperCase()}</span>
-            <span className="icon-label">{cat.shortName||cat.name.slice(0,2).toUpperCase()}</span>
-            {cat.enabledCount>0&&<span className="sidebar-count">{cat.enabledCount>9?"9+":cat.enabledCount}</span>}
-          </button>
-        ))}
-        <button className={"sidebar-item cape-btn"+(showCape?" active":"")} onClick={onCapeClick} title="Capes">
-          <span style={{fontSize:18}}>C</span>
-          <span className="icon-label">CP</span>
-        </button>
-      </div>
-    </aside>
-  );
-}
-
-function Toggle({ enabled, onClick }) {
+const Toggle = memo(function Toggle({ enabled, onClick }) {
   return <button className={"toggle"+(enabled?" on":"")} onClick={onClick}><span className="toggle-thumb" /></button>;
-}
+});
 
-function KeybindBadge({ label }) {
-  if (!label||label==="None") return null;
-  return <span className="badge">{label}</span>;
-}
-
-function ModuleCard({ mod, selected, onToggle, onSelect }) {
+const ModuleCard = memo(function ModuleCard({ mod, selected, onToggle, onSelect, i }) {
   return (
-    <div className={"card"+(mod.enabled?" on":"")+(selected?" selected":"")}>
-      <div className="card-main">
-        <Toggle enabled={mod.enabled} onClick={onToggle} />
-        <div className="card-body" onClick={onSelect}>
-          <strong>{mod.name}</strong>
-          {mod.description&&<span>{mod.description}</span>}
-        </div>
-      </div>
-      <div className="card-extra">
-        <KeybindBadge label={mod.bind.label} />
-        <button className="btn-icon" onClick={onSelect} title="Settings">{">"}</button>
-      </div>
+    <div
+      className={"card" + (mod.enabled ? " on" : "") + (selected ? " selected" : "")}
+      style={{"--i": i, cursor: "pointer"}}
+      onClick={() => onSelect(mod.id)}
+    >
+      <span className="card-name">{mod.name}</span>
+      {mod.bind && mod.bind.label && mod.bind.label !== "None" && <span className="bind-badge">{mod.bind.label}</span>}
+      <Toggle enabled={mod.enabled} onClick={(e) => { e.stopPropagation(); onToggle(mod.id); }} />
+      {mod.description && <div className="card-desc">{mod.description}</div>}
     </div>
   );
-}
+});
 
 function BoolSetting({ setting, onChange }) {
   return (
-    <div className="setting">
+    <div className="setting row">
       <span>{setting.name}</span>
       <Toggle enabled={setting.value} onClick={()=>onChange(!setting.value)} />
     </div>
@@ -122,11 +150,115 @@ function StrSetting({ setting, onChange }) {
   return <div className="setting"><span>{setting.name}</span><input type="text" value={v} onChange={e=>setV(e.target.value)} onBlur={commit} onKeyDown={e=>e.key==="Enter"&&commit()} /></div>;
 }
 
+// A real in-page dropdown. A native <select> is unusable here: the page is
+// rendered offscreen (CEF windowless), and native popups such as a <select>'s
+// option list are never painted into the OSR surface, so clicking one looks
+// like nothing happened. The list is therefore plain DOM, portaled to <body> so
+// neither the settings scroller nor `contain: paint` on .setting/.window can
+// clip it, and positioned to always land inside the viewport.
 function EnumSetting({ setting, onChange }) {
-  return <div className="setting"><span>{setting.name}</span><select value={setting.value} onChange={e=>onChange(e.target.value)}>{setting.options.map(o=><option key={o} value={o}>{o}</option>)}</select></div>;
+  const [open,setOpen]=useState(false);
+  const [pos,setPos]=useState(null);
+  const triggerRef=useRef(null);
+
+  const place=useCallback(()=>{
+    const el=triggerRef.current;
+    if(!el)return;
+    const r=el.getBoundingClientRect();
+    const gap=4;
+    const below=innerHeight-r.bottom-gap;
+    const above=r.top-gap;
+    const up=below<120&&above>below;          // flip up when there is no room below
+    const next={
+      left:Math.max(8,Math.min(r.left,innerWidth-r.width-8)),
+      width:r.width,
+      top:up?undefined:r.bottom+gap,
+      bottom:up?innerHeight-r.top+gap:undefined,
+      maxHeight:Math.max(80,(up?above:below)-4),
+    };
+    setPos(prev=>{
+      // Scroll/resize can fire many times per frame; when the anchored
+      // position is unchanged (the common case) keep the old object so React
+      // skips the portal re-render entirely.
+      if(prev&&prev.left===next.left&&prev.width===next.width&&prev.top===next.top
+         &&prev.bottom===next.bottom&&prev.maxHeight===next.maxHeight)return prev;
+      return next;
+    });
+  },[]);
+
+  useEffect(()=>{
+    if(!open)return;
+    const onKey=e=>{if(e.key==="Escape")setOpen(false)};
+    // place() reads layout and re-renders the portal, so bursty events are
+    // batched into one rAF and the listeners stay passive - scrolling the
+    // module list while a dropdown is open must never wait on React.
+    let raf=0;
+    const schedule=()=>{ if(!raf) raf=requestAnimationFrame(()=>{raf=0;place();}); };
+    window.addEventListener("resize",schedule,{passive:true});
+    window.addEventListener("scroll",schedule,{passive:true,capture:true});
+    window.addEventListener("keydown",onKey);
+    return()=>{
+      if(raf)cancelAnimationFrame(raf);
+      window.removeEventListener("resize",schedule);
+      window.removeEventListener("scroll",schedule,true);
+      window.removeEventListener("keydown",onKey);
+    };
+  },[open,place]);
+
+  const options=setting.options||[];
+  return (
+    <div className="setting">
+      <span>{setting.name}</span>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={"enum-trigger"+(open?" open":"")}
+        onClick={()=>{ if(open){setOpen(false);return;} place(); setOpen(true); }}
+      >
+        <span className="enum-value">{setting.value}</span>
+        <span className="enum-caret" aria-hidden="true">▾</span>
+      </button>
+      {open&&pos&&ReactDOM.createPortal(
+        <>
+          <div className="enum-backdrop" onMouseDown={()=>setOpen(false)} />
+          <div
+            className="enum-menu"
+            style={{left:pos.left,width:pos.width,top:pos.top,bottom:pos.bottom,maxHeight:pos.maxHeight}}
+          >
+            {options.map(o=>(
+              <button
+                key={o}
+                type="button"
+                className={"enum-option"+(o===setting.value?" active":"")}
+                onClick={()=>{ setOpen(false); if(o!==setting.value)onChange(o); }}
+              >
+                {o}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body
+      )}
+    </div>
+  );
 }
 
 function ColorSetting({ setting, onChange }) {
+  const [value, setValue] = useState(setting.value);
+  const valueRef = useRef(setting.value);
+  useEffect(() => setValue(setting.value), [
+    setting.value.r,
+    setting.value.g,
+    setting.value.b,
+    setting.value.a
+  ]);
+  useEffect(() => { valueRef.current = value; }, [value]);
+  const updateChannel = (channel, raw) => setValue(prev => {
+    const next = {...prev, [channel]: Number(raw)};
+    valueRef.current = next;
+    return next;
+  });
+  const commit = () => onChange(valueRef.current);
   const rows=[["r","#ff5a5a"],["g","#5aff96"],["b","#5aaaff"],["a","#dcdcdc"]];
   return (
     <div className="setting">
@@ -134,51 +266,210 @@ function ColorSetting({ setting, onChange }) {
       {rows.map(([c,cl])=>(
         <div key={c} className="color-row">
           <span className="swatch" style={{background:cl}}></span>
-          <input type="range" min={0} max={255} step={1} value={setting.value[c]} onChange={e=>{const n={...setting.value,[c]:Number(e.target.value)};onChange(n)}} />
-          <span>{setting.value[c]}</span>
+          <input type="range" min={0} max={255} step={1} value={value[c]} onChange={e=>updateChannel(c,e.target.value)} onMouseUp={commit} onTouchEnd={commit} />
+          <span>{value[c]}</span>
         </div>
       ))}
     </div>
   );
 }
 
+// GLFW key codes, the numbers a Bind actually stores (org.lwjgl.glfw.GLFW).
+// Every key the virtual keyboard can show must be in here: a missing entry used
+// to make that key silently do nothing when clicked.
+const KEY_MAP = (() => {
+  const m = {
+    Space: 32, Escape: 256, Enter: 257, Tab: 258, Backspace: 259, Insert: 260, Delete: 261,
+    ArrowRight: 262, ArrowLeft: 263, ArrowDown: 264, ArrowUp: 265,
+    PageUp: 266, PageDown: 267, Home: 268, End: 269,
+    CapsLock: 280, ScrollLock: 281, NumLock: 282, PrintScreen: 283, Pause: 284,
+    ShiftLeft: 340, ShiftRight: 344, ControlLeft: 341, ControlRight: 345,
+    AltLeft: 342, AltRight: 346, SuperLeft: 343, SuperRight: 347, Menu: 348,
+    "'": 39, ",": 44, "-": 45, ".": 46, "/": 47, ";": 59, "=": 61,
+    "[": 91, "\\": 92, "]": 93, "`": 96,
+    NumpadEnter: 335, NumpadDecimal: 330, NumpadDivide: 331, NumpadMultiply: 332,
+    NumpadSubtract: 333, NumpadAdd: 334, NumpadEqual: 336
+  };
+  for (let i = 0; i < 10; i++) m[String(i)] = 48 + i;                        // 0-9
+  for (let i = 0; i < 26; i++) m[String.fromCharCode(65 + i)] = 65 + i;      // A-Z
+  for (let i = 1; i <= 25; i++) m["F" + i] = 289 + i;                        // F1-F25
+  for (let i = 0; i < 10; i++) m["Numpad" + i] = 320 + i;                    // keypad 0-9
+  return m;
+})();
+
+/** KeyboardEvent.code -> GLFW key code, for the "Press Key" capture mode. */
+function codeToGlfw(code) {
+  if (!code) return null;
+  if (KEY_MAP[code] !== undefined) return KEY_MAP[code];   // Space, Numpad5, F5, ArrowLeft, ...
+  if (code.length === 4 && code.startsWith("Key")) return code.charCodeAt(3);
+  if (code.startsWith("Digit")) return 48 + Number(code.slice(5));
+  return null;
+}
+
+// QWERTY keyboard layout for the virtual keyboard (standard keys + F1-F12 + Home/PgUp/PgDn)
+const KEYBOARD_LAYOUT = [
+  ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'],
+  ['`', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 'Backspace'],
+  ['Tab', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '[', ']', '\\'],
+  ['CapsLock', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ';', "'", 'Enter'],
+  ['ShiftLeft', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', ',', '.', '/', 'ShiftRight'],
+  ['ControlLeft', 'AltLeft', 'Space', 'AltRight', 'ControlRight', 'Home', 'PageUp', 'PageDown']
+];
+
 function BindSetting({ setting, onChange }) {
-  const [capture,setCapture]=useState(false);
-  useEffect(()=>{
-    if(!capture)return;
-    const h=e=>{
-      e.preventDefault();
-      const map={Space:32,Escape:256,Enter:257,NumpadEnter:257,Tab:258,Backspace:259,Insert:260,Delete:261,ArrowRight:262,ArrowLeft:263,ArrowDown:264,ArrowUp:265,ShiftLeft:340,ShiftRight:344,ControlLeft:341,ControlRight:345,AltLeft:342,AltRight:346};
-      const k=map[e.code]??(e.code.startsWith("Key")?e.code.charCodeAt(3):e.code.startsWith("Digit")?e.code.charCodeAt(5):null);
-      if(k!=null){setCapture(false);onChange({key:k})}
+  const [showKeyboard, setShowKeyboard] = useState(false);
+  const [capture, setCapture] = useState(false);
+  const [keyboardPos, setKeyboardPos] = useState({x: 0, y: 0});
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef({x: 0, y: 0});
+
+  // Handle dragging. The modal re-renders ~77 keys per state update, so the
+  // drag is rAF-batched (several mousemoves collapse into one render) and the
+  // listener is passive - the same pattern the window drag already uses.
+  useEffect(() => {
+    if (!dragging) return;
+    let raf = 0, last = null;
+    const move = (e) => {
+      const start = dragStart.current;
+      if (!start) return;
+      last = { x: e.clientX - start.x, y: e.clientY - start.y };
+      if (!raf) raf = requestAnimationFrame(() => { raf = 0; setKeyboardPos(last); });
     };
-    window.addEventListener("keydown",h);
-    return ()=>window.removeEventListener("keydown",h);
-  },[capture]);
+    const up = () => {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      if (last) setKeyboardPos(last);
+      setDragging(false);
+      dragStart.current = {x: 0, y: 0};
+    };
+    window.addEventListener("mousemove", move, { passive: true });
+    window.addEventListener("mouseup", up);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+  }, [dragging]);
+
+  // Handle physical keyboard input when capture mode is active
+  useEffect(() => {
+    if (!capture) return;
+    const h = e => {
+      const k = codeToGlfw(e.code);
+      if (k == null) return;                 // unrecognised key: let it through
+      e.preventDefault();
+      setCapture(false);
+      onChange({ key: k });
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [capture]);
+
+  const handleKeySelect = (keyName) => {
+    const keyCode = KEY_MAP[keyName];
+    if (keyCode !== undefined) {
+      onChange({ key: keyCode });
+      setShowKeyboard(false);
+    }
+  };
+
+  const getKeyLabel = (keyName) => {
+    const labels = {
+      'Space': 'Space', 'Escape': 'Esc', 'Enter': 'Enter', 'Tab': 'Tab', 'Backspace': 'Bksp',
+      'Insert': 'Ins', 'Delete': 'Del', 'ArrowRight': '→', 'ArrowLeft': '←', 'ArrowDown': '↓', 'ArrowUp': '↑',
+      'ShiftLeft': 'Shift', 'ShiftRight': 'Shift', 'ControlLeft': 'Ctrl', 'ControlRight': 'Ctrl',
+      'AltLeft': 'Alt', 'AltRight': 'Alt', 'CapsLock': 'Caps', 'Backspace': 'Bksp',
+      'Insert': 'Ins', 'Home': 'Home', 'PageUp': 'PgUp', 'PageDown': 'PgDn', 'End': 'End',
+      'PrintScreen': 'PrtSc', 'ScrollLock': 'ScrlLk', 'Pause': 'Pause',
+      'NumLock': 'NumLk', '/': '/', '*': '*', '-': '-', '+': '+',
+      'Enter': 'Enter', 'Up': '↑', 'Down': '↓', 'Left': '←', 'Right': '→',
+      '0': '0', '1': '1', '2': '2', '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
+      '.': '.', 'Fn': 'Fn'
+    };
+    return labels[keyName] || keyName;
+  };
+
+  const getKeyWidth = (keyName) => {
+    const wideKeys = { 'Backspace': 2, 'Tab': 1.5, 'CapsLock': 1.8, 'Enter': 2, 'ShiftLeft': 2.2, 'ShiftRight': 2.2, 'ControlLeft': 1.5, 'ControlRight': 1.5, 'AltLeft': 1.5, 'AltRight': 1.5, 'Space': 6 };
+    return wideKeys[keyName] || 1;
+  };
+
   return (
     <div className="setting">
       <span>{setting.name} <em>{setting.value.label}</em></span>
       <div className="setting-actions">
-        <button className="btn" onClick={()=>setCapture(true)}>{capture?"Press key...":"Set"}</button>
-        <button className="btn" onClick={()=>onChange({key:-1})}>Clear</button>
+        <button className="btn" onClick={() => setShowKeyboard(true)}>{setting.value.key === -1 ? "Set Key" : "Change"}</button>
+        <button className="btn" onClick={() => onChange({ key: -1 })}>Clear</button>
+        <button className="btn" onClick={() => setCapture(!capture)}>{capture ? "Listening..." : "Press Key"}</button>
       </div>
+
+      {/* Virtual Keyboard Modal — portaled to <body>. Inside .setting, `contain:
+          paint` makes the row a containing block for fixed positioning, which
+          squeezed this whole overlay down to the size of the bind row. */}
+      {showKeyboard && ReactDOM.createPortal(
+        <div className="keyboard-modal" onClick={() => setShowKeyboard(false)}>
+          <div 
+            className="keyboard-container" 
+            onClick={e => e.stopPropagation()}
+            style={{ transform: `translate(${keyboardPos.x}px, ${keyboardPos.y}px)` }}
+          >
+            <div className="keyboard-header" 
+              onMouseDown={(e) => {
+                if (e.target.classList.contains('keyboard-close')) return;
+                dragStart.current = {x: e.clientX - keyboardPos.x, y: e.clientY - keyboardPos.y};
+                setDragging(true);
+              }}
+            >
+              <span>Select a Key</span>
+              <button className="keyboard-close" onClick={() => setShowKeyboard(false)}>✕</button>
+            </div>
+            <div className="keyboard-rows">
+              {KEYBOARD_LAYOUT.map((row, rowIndex) => (
+                <div key={rowIndex} className="keyboard-row">
+                  {row.map((keyName, keyIndex) => {
+                    const keyCode = KEY_MAP[keyName];
+                    const isActive = setting.value.key === keyCode;
+                    const width = getKeyWidth(keyName);
+                    return (
+                      <button
+                        key={`${rowIndex}-${keyIndex}`}
+                        className={`keyboard-key ${isActive ? 'active' : ''}`}
+                        style={{ flex: `${width} 1 auto` }}
+                        onClick={() => handleKeySelect(keyName)}
+                      >
+                        {getKeyLabel(keyName)}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            <div className="keyboard-hint">Click a key to bind it, or click outside to cancel. Drag header to move.</div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
 
-function SettingsDrawer({ mod, onToggle, onSettingChange, onClose }) {
+function SettingsPanel({ mod, onToggle, onSettingChange, onClose }) {
   useEffect(()=>{
     if(!mod)return;
-    const h=e=>{if(e.key==="Escape")onClose()};
+    const h=e=>{
+      if(e.key!=="Escape")return;
+      // Escape closes an open dropdown first; only the next one closes the panel.
+      if(document.querySelector(".enum-menu"))return;
+      onClose();
+    };
     window.addEventListener("keydown",h);
     return ()=>window.removeEventListener("keydown",h);
   },[mod,onClose]);
-  if(!mod)return<aside className="drawer"><div className="drawer-empty">Select a module</div></aside>;
+  if(!mod)return<aside key="none" className="settings"><div className="empty">Select a module</div></aside>;
   return (
-    <aside className="drawer">
-      <div className="drawer-head"><h2>{mod.name}</h2><button className="btn-icon" onClick={onClose}>X</button></div>
-      <div className="drawer-body">
-        <div className="setting"><span>Status</span><Toggle enabled={mod.enabled} onClick={()=>onToggle(mod.id)} /></div>
+    <aside key={mod.id} className="settings">
+      <div className="settings-head"><h2>{mod.name}</h2><button className="btn-icon" onClick={onClose}>X</button></div>
+      <div className="settings-body">
+        <div className="setting row"><span>Status</span><Toggle enabled={mod.enabled} onClick={()=>onToggle(mod.id)} /></div>
         {mod.settings.map(s=>{
           const onC=(v)=>onSettingChange(mod.id,s.id,v);
           switch(s.type){
@@ -196,261 +487,384 @@ function SettingsDrawer({ mod, onToggle, onSettingChange, onClose }) {
   );
 }
 
-function Cape3DPreview({ url }) {
-  const containerRef = useRef(null);
-  const sceneRef = useRef(null);
-  const capeMeshRef = useRef(null);
-  const animRef = useRef(null);
+// Category tabs are icon-only. Each glyph is a letter in the mod's own icon
+// font (webclickgui/fonts/icons.ttf): crossed swords, eye, runner, people...
+// so the tabs speak the same visual language as the rest of the client. The
+// name is revealed in a tooltip to the right on hover/focus (see .tab-tip).
+const CAT_ICON={
+  COMBAT:"e",    // crossed swords
+  MISC:"c",      // three dots
+  RENDER:"f",    // eye
+  MOVEMENT:"d",  // running figure
+  PLAYER:"v",    // two people
+  CLIENT:"h",    // gear
+  HUD:"t",       // panel / window
+  CONFIGS:"s",   // save / floppy disk
+};
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const w = containerRef.current.clientWidth;
-    const h = 240;
+// Theme catalogue is normally served by the bridge (config.themes), but an
+// older bridge or the very first poll before any state has landed carries no
+// config at all. Keep a small built-in copy - mirroring ClickGuiModule.WebTheme -
+// so the picker still opens and lists something instead of rendering an empty
+// menu.
+const FALLBACK_THEMES=[
+  {key:"GLASS",name:"Glass",layout:"top",swatch:"#00FF66"},
+  {key:"SIDEBAR",name:"Sidebar",layout:"rail",swatch:"#00FF66"},
+  {key:"MIDNIGHT",name:"Midnight",layout:"top",swatch:"#4F8CFF"},
+  {key:"METEOR",name:"Meteor",layout:"bottom",swatch:"#A46BFF"},
+  {key:"NEON",name:"Neon",layout:"rail",swatch:"#FF3DF0"},
+  {key:"FOCUS",name:"Focus",layout:"list",swatch:"#35D0FF"},
+  {key:"FROST",name:"Frost",layout:"top",swatch:"#0A84FF"},
+];
+const THEME_LS="oxevy.cgui.theme";
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0d1016);
+// A theme is a palette (data-theme) plus a structure (data-layout); the
+// stylesheet keys off both, so they must always be written together. Unknown
+// keys are still applied - CSS simply falls back - but the layout needs a real
+// value, hence the "top" default. The mirrored localStorage entry exists purely
+// so the bootstrap IIFE above can theme the first frame of the next load.
+function applyTheme(key, layout){
+  const theme=String(key||"GLASS").toLowerCase();
+  const lay=layout||"top";
+  const ds=document.documentElement.dataset;
+  // load() runs every poll, so bail before touching the DOM (and localStorage)
+  // when nothing actually changed - a theme flip must not be a per-tick repaint.
+  if(ds.theme===theme&&ds.layout===lay)return;
+  ds.theme=theme;
+  ds.layout=lay;
+  try{localStorage.setItem(THEME_LS,JSON.stringify({theme:theme.toUpperCase(),layout:lay}));}catch(e){}
+}
 
-    const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 10);
-    camera.position.set(0, 0.6, 2.5);
-    camera.lookAt(0, 0.5, 0);
+// Same portal + placement machinery as EnumSetting: the surface is rendered
+// offscreen (CEF windowless) so native popups are never painted, and the tab
+// bar's overflow rules would clip an in-flow menu. Anchored to the theme
+// button's right edge so the (wider than the button) menu stays inside the
+// window. The menu reuses the enum-* classes on purpose - those styles exist.
+const ThemePicker = memo(function ThemePicker({ themes, theme, onPick }) {
+  const [open,setOpen]=useState(false);
+  const [pos,setPos]=useState(null);
+  const triggerRef=useRef(null);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(w, h);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    containerRef.current.appendChild(renderer.domElement);
-
-    // Lights
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambient);
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-    dir.position.set(1, 2, 1);
-    scene.add(dir);
-    const back = new THREE.DirectionalLight(0x88aaff, 0.4);
-    back.position.set(-1, 0, -1);
-    scene.add(back);
-
-    // Player body
-    const bodyMat = new THREE.MeshPhongMaterial({ color: 0x3b82f6 });
-    const headMat = new THREE.MeshPhongMaterial({ color: 0xfbbf24 });
-    const armMat = new THREE.MeshPhongMaterial({ color: 0x3b82f6 });
-    const legMat = new THREE.MeshPhongMaterial({ color: 0x1e40af });
-    const skinMat = new THREE.MeshPhongMaterial({ color: 0xf5d6b8 });
-
-    const group = new THREE.Group();
-
-    // Head
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), headMat);
-    head.position.set(0, 1.15, 0);
-    group.add(head);
-
-    // Helmet layer (slightly larger)
-    const helmet = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.44, 0.44), new THREE.MeshPhongMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.15 }));
-    helmet.position.copy(head.position);
-    group.add(helmet);
-
-    // Body (torso)
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.2), bodyMat);
-    body.position.set(0, 0.7, 0);
-    group.add(body);
-
-    // Left arm
-    const lArm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.45, 0.12), armMat);
-    lArm.position.set(-0.28, 0.75, 0);
-    group.add(lArm);
-
-    // Right arm
-    const rArm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.45, 0.12), armMat);
-    rArm.position.set(0.28, 0.75, 0);
-    group.add(rArm);
-
-    // Legs
-    const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.45, 0.12), legMat);
-    lLeg.position.set(-0.1, 0.23, 0);
-    group.add(lLeg);
-
-    const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.45, 0.12), legMat);
-    rLeg.position.set(0.1, 0.23, 0);
-    group.add(rLeg);
-
-    scene.add(group);
-
-    // Cape
-    const capeGeo = new THREE.PlaneGeometry(0.5, 0.65);
-    const capeMat = new THREE.MeshPhongMaterial({
-      color: 0x888888,
-      side: THREE.DoubleSide,
-      transparent: true,
-    });
-    const cape = new THREE.Mesh(capeGeo, capeMat);
-    cape.position.set(0, 0.65, -0.12);
-    scene.add(cape);
-    capeMeshRef.current = cape;
-
-    // Floor shadow
-    const shadowMat = new THREE.MeshPhongMaterial({ color: 0x000000, transparent: true, opacity: 0.2 });
-    const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 16), shadowMat);
-    shadow.rotation.x = -Math.PI / 2;
-    shadow.position.set(0, -0.02, 0);
-    scene.add(shadow);
-
-    // Orbit controls for interaction
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableZoom = false;
-    controls.enablePan = false;
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 2;
-    controls.target.set(0, 0.5, 0);
-    controls.update();
-
-    const animate = () => {
-      animRef.current = requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
+  const place=useCallback(()=>{
+    const el=triggerRef.current;
+    if(!el)return;
+    const r=el.getBoundingClientRect();
+    const gap=4;
+    const width=Math.max(168,r.width);        // the button itself is only an icon wide
+    const below=innerHeight-r.bottom-gap;
+    const above=r.top-gap;
+    const up=below<140&&above>below;          // flip up when there is no room below
+    const next={
+      left:Math.max(8,Math.min(r.right-width,innerWidth-width-8)),
+      width,
+      top:up?undefined:r.bottom+gap,
+      bottom:up?innerHeight-r.top+gap:undefined,
+      maxHeight:Math.max(80,(up?above:below)-4),
     };
-    animate();
-
-    sceneRef.current = { scene, camera, renderer, controls };
-
-    return () => {
-      if (animRef.current) cancelAnimationFrame(animRef.current);
-      controls.dispose();
-      renderer.dispose();
-      if (containerRef.current && renderer.domElement.parentElement === containerRef.current) {
-        containerRef.current.removeChild(renderer.domElement);
-      }
-    };
-  }, []);
-
-  // Update cape texture when URL changes
-  useEffect(() => {
-    if (!capeMeshRef.current || !url) return;
-    const loader = new THREE.TextureLoader();
-    loader.load(url, tex => {
-      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-      capeMeshRef.current.material.map = tex;
-      capeMeshRef.current.material.color.set(0xffffff);
-      capeMeshRef.current.material.needsUpdate = true;
-    }, undefined, () => {
-      // on error - keep the gray color
+    setPos(prev=>{
+      // Scroll/resize can fire many times per frame; keep the old object when
+      // the anchored position is unchanged so React skips the portal render.
+      if(prev&&prev.left===next.left&&prev.width===next.width&&prev.top===next.top
+         &&prev.bottom===next.bottom&&prev.maxHeight===next.maxHeight)return prev;
+      return next;
     });
-  }, [url]);
+  },[]);
 
-  return <div ref={containerRef} className="cape-3d-preview" />;
-}
+  useEffect(()=>{
+    if(!open)return;
+    const onKey=e=>{if(e.key==="Escape")setOpen(false)};
+    let raf=0;
+    const schedule=()=>{ if(!raf) raf=requestAnimationFrame(()=>{raf=0;place();}); };
+    window.addEventListener("resize",schedule,{passive:true});
+    window.addEventListener("scroll",schedule,{passive:true,capture:true});
+    window.addEventListener("keydown",onKey);
+    return()=>{
+      if(raf)cancelAnimationFrame(raf);
+      window.removeEventListener("resize",schedule);
+      window.removeEventListener("scroll",schedule,true);
+      window.removeEventListener("keydown",onKey);
+    };
+  },[open,place]);
 
-function CapePanel({ capeData, repoData, onSelectCape }) {
-  const [viewCapeUrl, setViewCapeUrl] = useState(null);
-  const textStyle = { color: "var(--muted)", textAlign: "center", padding: "24px", fontSize: "13px" };
+  const active=String(theme||"GLASS").toUpperCase();
   return (
-    <section className="main-panel">
-      <div className="panel-head">
-        <div><h1>Cape Selection</h1><p>Choose your cape</p></div>
-      </div>
-      <div className="cape-layout">
-        <div className="cape-list-col">
-          {(!repoData || !repoData.capes || repoData.capes.length === 0) ? (
-            <div style={textStyle}>Loading capes from repository...</div>
-          ) : (
-            <div className="cape-grid">
-              {repoData.capes.map(c => {
-                const activeUrl = capeData ? (capeData.customUrl || (capeData.capes && capeData.capes[capeData.activeIndex] && capeData.capes[capeData.activeIndex].url) || "") : "";
-                const isActive = c.url === activeUrl;
-                return (
-                  <div key={c.index} className={"cape-card"+(isActive?" active":"")} onClick={() => { onSelectCape(c.index); setViewCapeUrl(c.url); }}>
-                    <div className="cape-thumb-wrap">
-                      <img src={c.url} alt={c.name} className="cape-thumb" crossOrigin="anonymous" onError={e=>{e.target.style.display="none"}} />
-                    </div>
-                    <span className="cape-name">{c.name}</span>
-                    {isActive && <span className="cape-badge">Active</span>}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {capeData && capeData.mode === "NONE" && !repoData?.capes?.length && (
-            <div style={textStyle}>No capes available. Add capes to the oxevy-assets repo.</div>
-          )}
-        </div>
-        <div className="cape-preview-col">
-          <Cape3DPreview url={viewCapeUrl} />
-        </div>
-      </div>
-    </section>
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={"theme-btn"+(open?" open":"")}
+        title="Theme"
+        aria-label="Theme"
+        onClick={()=>{ if(open){setOpen(false);return;} place(); setOpen(true); }}
+      >
+        {/* 18px palette glyph; currentColor so the stylesheet owns the tint */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+          <path d="M12 3a9 9 0 0 0 0 18c1.1 0 1.8-.7 1.8-1.6 0-.5-.2-.9-.5-1.2-.3-.4-.5-.8-.5-1.2 0-.9.8-1.7 1.7-1.7H16a5 5 0 0 0 5-5c0-4.2-4-7.3-9-7.3Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+          <circle cx="7.6" cy="12.2" r="1.2" fill="currentColor"/>
+          <circle cx="9.8" cy="8.2" r="1.2" fill="currentColor"/>
+          <circle cx="14.2" cy="8.2" r="1.2" fill="currentColor"/>
+          <circle cx="16.4" cy="11.8" r="1.2" fill="currentColor"/>
+        </svg>
+      </button>
+      {open&&pos&&ReactDOM.createPortal(
+        <>
+          <div className="enum-backdrop" onMouseDown={()=>setOpen(false)} />
+          <div className="enum-menu theme-menu" style={{left:pos.left,width:pos.width,top:pos.top,bottom:pos.bottom,maxHeight:pos.maxHeight}}>
+            {themes.map(t=>(
+              <button
+                key={t.key}
+                type="button"
+                className={"enum-option"+(t.key===active?" active":"")}
+                onClick={()=>{ setOpen(false); if(t.key!==active)onPick(t.key); }}
+              >
+                <span className="theme-swatch" style={{background:t.swatch}} />
+                <span className="theme-name">{t.name}</span>
+                <span className="theme-tag">{t.layout}</span>
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body
+      )}
+    </>
   );
-}
+});
 
-function MainPanel({ categories, activeKey, selectedId, onToggle, onSelectModule, search, onSearch }) {
-  const cat=categories.find(c=>c.key===activeKey);
-  const raw=cat?cat.modules:[];
-  const q=search.trim().toLowerCase();
-  const mods=q?raw.filter(m=>m.name.toLowerCase().includes(q)||(m.description&&m.description.toLowerCase().includes(q))):raw;
-  const enabledCount=raw.filter(m=>m.enabled).length;
+const TabBar = memo(function TabBar({ categories, activeKey, onSelect, onClose, themes, theme, onPickTheme }) {
   return (
-    <section className="main-panel">
-      <div className="panel-head">
-        <div><h1>{cat?cat.name:"Modules"}</h1><p>{enabledCount}/{raw.length} enabled</p></div>
+    <div className="tabbar">
+      <div className="tabs">
+        {categories.map(cat => (
+          <button key={cat.key} className={"tab"+(cat.key===activeKey?" active":"")} onClick={()=>onSelect(cat.key)}
+                  aria-label={cat.name}>
+            <span className="tab-icon" aria-hidden="true">{CAT_ICON[cat.key]||cat.icon||cat.name.charAt(0)}</span>
+            {cat.enabledCount>0&&<span className="tab-count">{cat.enabledCount>9?"9+":cat.enabledCount}</span>}
+            <span className="tab-tip" role="tooltip">{cat.name}</span>
+          </button>
+        ))}
       </div>
-      <div className="search-wrap"><input className="search" type="text" placeholder="Search modules" value={search} onChange={e=>onSearch(e.target.value)} />{search&&<button className="search-clear" onClick={()=>onSearch("")}>✕</button>}</div>
-      <div className="module-list">
-        {mods.length===0?<div className="empty">No modules match</div>:mods.map(m=><ModuleCard key={m.id} mod={m} selected={m.id===selectedId} onToggle={()=>onToggle(m.id)} onSelect={()=>onSelectModule(m.id)} />)}
-      </div>
-    </section>
+      <div className="drag-grip" title="Drag to move">☰</div>
+      <ThemePicker themes={themes} theme={theme} onPick={onPickTheme} />
+      <button className="close-btn" title="Close ClickGui" onClick={onClose}>✕</button>
+    </div>
   );
+});
+
+function loadPos(){
+  try{
+    const p=JSON.parse(localStorage.getItem("oxevy.cgui.pos"));
+    if(!p||typeof p.x!=="number"||typeof p.y!=="number")return{x:0,y:0};
+    const vw=window.innerWidth,vh=window.innerHeight;
+    return{
+      x:Math.min(Math.max(p.x,-(vw/2-60)),vw/2-60),
+      y:Math.min(Math.max(p.y,-(vh/2-60)),vh/2-60),
+    };
+  }catch(e){return{x:0,y:0};}
 }
+// Elements the user interacts with: dragging must not start on them. Portaled
+// widgets (dropdown list, virtual keyboard) are not DOM descendants of the
+// window, but React bubbles their events through the tree to the window's
+// mousedown handler, so they must be listed here too.
+const DRAG_EXCLUDE=".tab,.card,.toggle,.btn,.btn-icon,.tab-count,.card-name,.bind-badge,.swatch,.setting,input,select,.enum-trigger,.enum-menu,.enum-option,.enum-backdrop,.keyboard-modal,.keyboard-container,.keyboard-header,.keyboard-key,.keyboard-close,.keyboard-hint,.theme-btn,.theme-menu,.theme-swatch,.theme-name,.theme-tag";
 
 function App() {
   const [data,setData]=useState(null);
-  const [capeData,setCapeData]=useState(null);
-  const [repoData,setRepoData]=useState(null);
   const [activeKey,setActiveKey]=useState(null);
   const [selectedId,setSelectedId]=useState(null);
   const [search,setSearch]=useState("");
-  const [showCape,setShowCape]=useState(false);
+  const [pos,setPos]=useState(loadPos);
+  const posRef=useRef(pos);posRef.current=pos;
+  const [dragging,setDragging]=useState(false);
+  const dragStart=useRef(null);
+  const wrapRef=useRef(null);
+  const rafRef=useRef(null);
+  const activeKeyRef=useRef(activeKey);activeKeyRef.current=activeKey;
+
+  const onWinMouseDown=useCallback((e)=>{
+    if(e.button!==0||e.target.closest(DRAG_EXCLUDE))return;
+    dragStart.current={mx:e.clientX,my:e.clientY,px:posRef.current.x,py:posRef.current.y,curX:posRef.current.x,curY:posRef.current.y};
+    setDragging(true);
+  },[]);
+
+  const onWinDoubleClick=useCallback((e)=>{
+    if(e.button!==0||e.target.closest(DRAG_EXCLUDE))return;
+    setPos({x:0,y:0});
+    if(wrapRef.current)wrapRef.current.style.transform="translate(0px, 0px)";
+    try{localStorage.setItem("oxevy.cgui.pos",JSON.stringify({x:0,y:0}));}catch(e){}
+  },[]);
+
+  // High performance dragging: mutate transform directly via rAF without triggering React re-renders on every mouse pixel
+  useEffect(()=>{
+    if(!dragging)return;
+    const move=(e)=>{
+      const d=dragStart.current;if(!d)return;
+      const vw=window.innerWidth,vh=window.innerHeight;
+      d.curX=Math.min(Math.max(d.px+(e.clientX-d.mx),-(vw/2-60)),vw/2-60);
+      d.curY=Math.min(Math.max(d.py+(e.clientY-d.my),-(vh/2-60)),vh/2-60);
+      if(!rafRef.current){
+        rafRef.current=requestAnimationFrame(()=>{
+          if(wrapRef.current){
+            wrapRef.current.style.transform=`translate(${d.curX}px, ${d.curY}px)`;
+          }
+          rafRef.current=null;
+        });
+      }
+    };
+    const up=()=>{
+      const d=dragStart.current;
+      if(d){
+        const finalPos={x:d.curX,y:d.curY};
+        setPos(finalPos);
+        posRef.current=finalPos;
+        try{localStorage.setItem("oxevy.cgui.pos",JSON.stringify(finalPos));}catch(e){}
+      }
+      if(rafRef.current){cancelAnimationFrame(rafRef.current);rafRef.current=null;}
+      setDragging(false);dragStart.current=null;
+    };
+    window.addEventListener("mousemove",move,{passive:true});
+    window.addEventListener("mouseup",up);
+    return ()=>{
+      window.removeEventListener("mousemove",move);
+      window.removeEventListener("mouseup",up);
+      if(rafRef.current){cancelAnimationFrame(rafRef.current);rafRef.current=null;}
+    };
+  },[dragging]);
+
+  const storedTab=useCallback(()=>{
+    try{return localStorage.getItem("oxevy.cgui.tab")||null;}catch(e){return null;}
+  },[]);
 
   const load=useCallback(async()=>{
-    try{const d=await API.getState();setData(d);if(!activeKey&&d.categories.length)setActiveKey(d.categories[0].key);}catch(e){console.error(e)}
-  },[activeKey]);
-
-  const loadCape=useCallback(async()=>{
-    try{const d=await API.getCapeState();setCapeData(d);}catch(e){console.error(e)}
-  },[]);
-
-  const loadRepo=useCallback(async()=>{
-    try{const d=await API.getRepoCapes();setRepoData(d);}catch(e){console.error(e)}
-  },[]);
+    try{
+      const d=await API.getState();
+      // null => 304 Not Modified: the state is unchanged, so leave React alone
+      // and avoid re-rendering every card and setting on every poll tick.
+      if(!d)return;
+      setData(d);
+      // Re-apply the theme the bridge reports. This is also how a switch made
+      // from the ClickGui module's own "Theme" setting reaches the page: the
+      // poll carries the new config and applyTheme is a no-op when unchanged.
+      if(d.config&&d.config.theme)applyTheme(d.config.theme,d.config.layout);
+      if(!activeKeyRef.current&&d.categories.length){
+        // Restore the last opened tab; fall back to the first category.
+        const saved=storedTab();
+        const cat=d.categories.find(c=>c.key===saved)||d.categories[0];
+        setActiveKey(cat.key);
+      }
+    }catch(e){console.error(e)}
+  },[storedTab]);
 
   useEffect(()=>{load()},[load]);
-  useEffect(()=>{loadCape()},[loadCape]);
-  useEffect(()=>{loadRepo()},[loadRepo]);
 
-  useEffect(()=>{const i=setInterval(load,2000);return ()=>clearInterval(i)},[load]);
-  useEffect(()=>{const i=setInterval(loadCape,2000);return ()=>clearInterval(i)},[loadCape]);
-  useEffect(()=>{const i=setInterval(loadRepo,5000);return ()=>clearInterval(i)},[loadRepo]);
+  useEffect(()=>{
+    let timer=null;
+    const tick=async()=>{
+      if(document.visibilityState==="visible") await load();
+      timer=setTimeout(tick,POLL_MS);
+    };
+    timer=setTimeout(tick,POLL_MS);
+    const onVisible=()=>{if(document.visibilityState==="visible")load()};
+    document.addEventListener("visibilitychange",onVisible);
+    return ()=>{
+      if(timer)clearTimeout(timer);
+      document.removeEventListener("visibilitychange",onVisible);
+    };
+  },[load]);
 
   const hToggle=useCallback(async(id)=>{setData(await API.toggle(id));},[]);
-  const hSetting=useCallback(async(modId,setId,val)=>{setData(await API.setSetting(modId,setId,val));},[]);
-  const hSelect=useCallback((id)=>{setSelectedId(p=>p===id?null:id);},[]);
-  const hCategory=useCallback((k)=>{setActiveKey(k);setSelectedId(null);setShowCape(false);},[]);
-  const hCapeClick=useCallback(()=>{setShowCape(p=>!p);setSelectedId(null);},[]);
-
-  const hCapeSelect=useCallback(async(repoIndex)=>{
-    await API.selectCape({repoIndex});
-    loadCape();
+  const hSetting=useCallback(async(modId,setId,val)=>{
+    const st=await API.setSetting(modId,setId,val);
+    // The ClickGui module's "Theme" enum is edited through this generic path
+    // too, so sync the palette from the response instead of waiting up to a
+    // poll interval for the same config to come back from /api/state.
+    if(st&&st.config&&st.config.theme)applyTheme(st.config.theme,st.config.layout);
+    setData(st);
   },[]);
+
+  // Built from the bridge catalogue when present, else the local fallback, so
+  // the picker is always populated even against an older bridge.
+  const themes=useMemo(()=>{
+    const t=data&&data.config&&data.config.themes;
+    return Array.isArray(t)&&t.length?t:FALLBACK_THEMES;
+  },[data]);
+  const themeKey=(data&&data.config&&data.config.theme)||"GLASS";
+
+  const hPickTheme=useCallback(async(key)=>{
+    // Optimistic: the palette flips on click rather than a round-trip later.
+    // The POSTed state then reconciles it - the bridge stays the authority.
+    const entry=themes.find(t=>t.key===key);
+    if(entry)applyTheme(entry.key,entry.layout);
+    try{
+      const st=await API.setSetting("ClickGui","Theme",key);
+      if(st&&st.config&&st.config.theme)applyTheme(st.config.theme,st.config.layout);
+      setData(st);
+    }catch(e){console.error(e)}
+  },[themes]);
+
+  const hSelect=useCallback((id)=>{setSelectedId(p=>p===id?null:id);},[]);
+  const hCategory=useCallback((k)=>{setActiveKey(k);setSelectedId(null);setSearch("");try{localStorage.setItem("oxevy.cgui.tab",k);}catch(e){}});
+  const hClose=useCallback(()=>{
+    // Toggle ClickGui module off to close the GUI
+    API.toggle("ClickGui");
+  },[]);
+
+  const cat=useMemo(()=>{
+    if(!data)return null;
+    return data.categories.find(c=>c.key===activeKey)||null;
+  },[data,activeKey]);
+
+  // Synthetic "Configs" tab: not a real module category from the bridge, but a
+  // hand-built tab that swaps the whole body for the shared ConfigPanel so the
+  // player can load / create configs without leaving the ClickGui.
+  const categories=useMemo(()=>data?data.categories.concat([{key:"CONFIGS",name:"Configs",modules:[],enabledCount:0}]):[],[data]);
+  const isConfigs=activeKey==="CONFIGS";
+  const ConfigPanel=window.ConfigPanelLib.ConfigPanel;
+
+  const raw=useMemo(()=>cat?cat.modules:[],[cat]);
+  const q=search.trim().toLowerCase();
+  const mods=useMemo(()=>{
+    if(!q)return raw;
+    return raw.filter(m=>m.name.toLowerCase().includes(q)||(m.description&&m.description.toLowerCase().includes(q)));
+  },[raw,q]);
+  const enabledCount=useMemo(()=>raw.filter(m=>m.enabled).length,[raw]);
+
+  const selectedMod=useMemo(()=>{
+    if(!selectedId||!data)return null;
+    for(const c of data.categories){
+      const m=c.modules.find(x=>x.id===selectedId);
+      if(m)return m;
+    }
+    return null;
+  },[data,selectedId]);
 
   if(!data)return <div className="loading">Connecting to Oxevy...</div>;
 
-  const findMod=(id)=>{for(const c of data.categories){const m=c.modules.find(x=>x.id===id);if(m)return m;}return null;};
-
   return (
-    <div className="shell">
-      <Sidebar categories={data.categories} activeKey={showCape?"_cape":activeKey} onSelect={hCategory} onCapeClick={hCapeClick} showCape={showCape} />
-      {showCape ? (
-        <CapePanel capeData={capeData} repoData={repoData} onSelectCape={hCapeSelect} />
-      ) : (
-        <MainPanel categories={data.categories} activeKey={activeKey} selectedId={selectedId} onToggle={hToggle} onSelectModule={hSelect} search={search} onSearch={setSearch} />
-      )}
-      <SettingsDrawer mod={findMod(selectedId)} onToggle={hToggle} onSettingChange={hSetting} onClose={()=>setSelectedId(null)} />
+    <div ref={wrapRef} className={"window-wrap"+(dragging?" dragging":"")} style={{transform:`translate(${pos.x}px,${pos.y}px)`}} onMouseDown={onWinMouseDown} onDoubleClick={onWinDoubleClick}>
+    <div className="window">
+      <TabBar categories={categories} activeKey={activeKey} onSelect={hCategory} onClose={hClose}
+              themes={themes} theme={themeKey} onPickTheme={hPickTheme} />
+      <React.Fragment>
+          {isConfigs ? (
+            <div className="configs-host">
+              <ConfigPanel onClose={()=>hCategory(categories[0].key)} />
+            </div>
+          ) : (
+          <div className="body">
+            <div className="module-col">
+              <div className="search-row">
+                <input className="search" type="text" placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)} />
+              </div>
+              <div key={activeKey} className="module-list">
+                {mods.length===0?<div className="empty">No modules match</div>:mods.map((m,idx)=><ModuleCard key={m.id} i={idx} mod={m} selected={m.id===selectedId} onToggle={hToggle} onSelect={hSelect} />)}
+              </div>
+            </div>
+            <SettingsPanel mod={selectedMod} onToggle={hToggle} onSettingChange={hSetting} onClose={()=>setSelectedId(null)} />
+          </div>
+          )}
+          <div className="footer"><span>{isConfigs?"Manage configs":`${enabledCount}/${raw.length} enabled`}</span><span className="brand-foot">OXEVY</span></div>
+        </React.Fragment>
+    </div>
     </div>
   );
 }
@@ -460,3 +874,4 @@ root.render(React.createElement(App));
   </script>
 </body>
 </html>
+

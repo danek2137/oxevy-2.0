@@ -121,6 +121,7 @@ public class KomarModule extends Module {
 
         for (var entity : mc.level.entitiesForRendering()) {
             if (!(entity instanceof Player player)) continue;
+            if (me.alpha432.oxevy.util.entity.GhostPlayerEntity.isGhost(player)) continue;
             if (player == mc.player) continue;
             if (!player.isAlive() || player.isRemoved()) continue;
             if (Oxevy.friendManager.isFriend(player)) continue;

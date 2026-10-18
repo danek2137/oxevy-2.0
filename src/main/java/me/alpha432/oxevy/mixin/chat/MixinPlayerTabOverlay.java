@@ -1,6 +1,7 @@
 package me.alpha432.oxevy.mixin.chat;
 
 import me.alpha432.oxevy.Oxevy;
+import me.alpha432.oxevy.features.modules.client.NickChangerModule;
 import me.alpha432.oxevy.util.player.PlayerBadges;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -24,12 +25,19 @@ public class MixinPlayerTabOverlay {
     @Inject(method = "getNameForDisplay(Lnet/minecraft/client/multiplayer/PlayerInfo;)Lnet/minecraft/network/chat/Component;", at = @At("RETURN"), cancellable = true)
     private void addBadgeToTabName(PlayerInfo info, CallbackInfoReturnable<Component> cir) {
         String name = info.getProfile().name();
-        String badge = PlayerBadges.getBadge(name);
-        if (badge.isEmpty()) return;
-
         Component display = cir.getReturnValue();
-        Component badged = Component.literal(badge + " ").append(display.copy());
-        cir.setReturnValue(badged);
+
+        String badge = PlayerBadges.getBadge(name);
+        if (!badge.isEmpty()) {
+            display = Component.literal(badge + " ").append(display.copy());
+        }
+
+        NickChangerModule nickChanger = Oxevy.moduleManager.getModuleByClass(NickChangerModule.class);
+        if (nickChanger != null && nickChanger.tab.getValue()) {
+            display = nickChanger.replace(display);
+        }
+
+        cir.setReturnValue(display);
     }
 
     @Inject(method = "renderPingIcon(Lnet/minecraft/client/gui/GuiGraphics;IIILnet/minecraft/client/multiplayer/PlayerInfo;)V", at = @At("HEAD"))

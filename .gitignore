@@ -30,6 +30,8 @@ atlassian-ide-plugin.xml
 *.zip
 *.tar.gz
 *.rar
+# Patched upstream dependency jar (mcef-modern) is intentionally tracked
+!libs/*.jar
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
@@ -134,3 +136,20 @@ fonts/
 *.json~
 *.json.bak
 release/
+
+# Local scratch / not part of the project
+Modelfile
+buglog.txt
+crash-*.txt
+debugbuld.txt
+latest.txt
+idk123.md
+gemini-svg*.svg
+metor client code */
+web/
+webmainmenu/*.backup
+# stale hashed web build leftovers at resources root (unreferenced)
+src/main/resources/disclose-version-*.js
+src/main/resources/index-*.css
+src/main/resources/favicon.svg
+src/main/resources/icons.svg

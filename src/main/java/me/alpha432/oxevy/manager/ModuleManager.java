@@ -37,7 +37,8 @@ public class ModuleManager implements Jsonable, Util {
         register(new ClientSpoof());
         register(new fakeplayer());
         register(new RPCModule());
-        register(new WebClickGuiModule());
+        register(new NickChangerModule());
+        register(new MacroModule());
 
         // COMBAT
         register(new KillAuraModule());
@@ -45,6 +46,7 @@ public class ModuleManager implements Jsonable, Util {
         register(new BowAimbotModule());
         register(new TriggerBotModule());
         register(new CriticalsModule());
+        register(new AttackSoundsModule());
         register(new KeyPearlModule());
         register(new Strafe());
         register(new AutoCobwebModule());
@@ -54,6 +56,11 @@ public class ModuleManager implements Jsonable, Util {
         register(new ReachModule());
         register(new KomarModule());
         register(new SurroundModule());
+        register(new CrystalAuraModule());
+        register(new CrystalRangeModule());
+        register(new AutoAttributeSwapModule());
+        register(new AutoBlockModule());
+        register(new AutoArmorModule());
 
         // HUD
         register(new WatermarkHudModule());
@@ -70,14 +77,24 @@ public class ModuleManager implements Jsonable, Util {
         register(new InventoryHudModule());
         register(new MenuWatermark());
         register(new KeybindsHudModule());
+        register(new PlayerModelHudModule());
+        register(new MinimapHudModule());
+        register(new PingHudModule());
+        register(new TimeHudModule());
+        register(new MemoryHudModule());
+        register(new DirectionHudModule());
+        register(new MouseMovementHudModule());
+        register(new DynamicIslandHudModule());
 
         // MISC
         register(new MCFModule());
         register(new AutoToolModule());
+        register(new ItemPickupModule());
         register(new AutoDropModule());
         register(new AntiAFKModule());
         register(new DerpModule());
         register(new AutoReconnect());
+        register(new ShulkerPreviewModule());
 
         // MOVEMENT
         register(new StepModule());
@@ -102,6 +119,8 @@ public class ModuleManager implements Jsonable, Util {
         register(new GlideModule());
         register(new FastLadderModule());
         register(new AirstuckModule());
+        register(new LongJumpModule());
+        register(new NoPushModule());
 
         // PLAYER
         register(new FastPlaceModule());
@@ -150,13 +169,21 @@ public class ModuleManager implements Jsonable, Util {
         register(new NoRenderModule());
         register(new ESPModule());
         register(new HandViewModule());
+        register(new AnimationsModule());
         register(new CameraTweaksModule());
         register(new BlockSelectionModule());
         register(new TunnelESPModule());
         register(new TrailModule());
         register(new EntityOwnerModule());
         register(new ItemPhysicsModule());
+        register(new TimeChangerModule());
+        register(new CustomBlockOutlineModule());
         register(new CosmeticsModule());
+        register(new GlowingHandsModule());
+        register(new CustomSkyModule());
+        register(new AspectRatioModule());
+        register(new CustomFOVModule());
+        // register(new HandsShaderModule());
 
         // Set default enabled modules
         FpsHudModule fps = (FpsHudModule) getModuleByClass(FpsHudModule.class);
@@ -202,6 +229,13 @@ public class ModuleManager implements Jsonable, Util {
         MenuWatermark menuWatermark = (MenuWatermark) getModuleByClass(MenuWatermark.class);
         if (menuWatermark != null) {
             menuWatermark.enable();
+        }
+
+        // The Dynamic Island is on by default; its onEnable() also starts the
+        // MusicPlayer poller that feeds its now-playing view.
+        DynamicIslandHudModule island = (DynamicIslandHudModule) getModuleByClass(DynamicIslandHudModule.class);
+        if (island != null) {
+            island.enable();
         }
 
         LOGGER.info("Registered {} modules", modules.size());

@@ -56,6 +56,7 @@ public class TriggerBotModule extends Module {
     }
 
     private boolean isValidTarget(Entity e) {
+        if (me.alpha432.oxevy.util.entity.GhostPlayerEntity.isGhost(e)) return false;
         if (!(e instanceof LivingEntity living) || living.getHealth() <= 0) return false;
         if (e.isRemoved()) return false;
         if (e.isInvisible() && !invisibles.getValue()) return false;

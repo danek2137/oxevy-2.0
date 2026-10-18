@@ -28,19 +28,21 @@ public class ColorComponent extends SettingComponent {
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         Color c = (Color) setting.getValue();
         Color accent = ClickGuiModule.getInstance().color.getValue();
-        RenderUtil.roundRect(context, x, y, width, height, 10f, isHovered(mouseX, mouseY) ? 0x1AFFFFFF : 0x12FFFFFF);
+        boolean hovered = isHovered(mouseX, mouseY);
+        int totalH = getHeight();
+        RenderUtil.rect(context, x, y, x + width, y + totalH, hovered ? 0xFF1E1E30 : 0xFF1A1A28);
         int textY = y + (height - 8) / 2;
-        context.drawString(CustomFont.font(), setting.getName(), x + 10, textY, 0xFFE6E6E6);
+        context.drawString(CustomFont.font(), setting.getName(), x + 6, textY, 0xFFE6E6E6);
         String preview = String.format("#%02X%02X%02X", c.getRed(), c.getGreen(), c.getBlue());
-        context.drawString(CustomFont.font(), preview, x + width - 58 - CustomFont.font().width(preview), textY, new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 235).getRGB());
-        RenderUtil.roundRect(context, x + width - 34, y + 4, 24, height - 8, 6f, c.getRGB());
+        context.drawString(CustomFont.font(), preview, x + width - 50 - CustomFont.font().width(preview), textY, new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 235).getRGB());
+        RenderUtil.rect(context, x + width - 30, y + 3, x + width - 6, y + height - 3, c.getRGB());
 
         if (open) {
             int contentY = y + height + 8;
             for (int i = 0; i < CHANNEL_NAMES.length; i++) {
                 int rowY = contentY + i * 22;
                 int value = getChannelValue(c, i);
-                drawChannelRow(context, CHANNEL_NAMES[i], CHANNEL_COLORS[i], value, x + 10, rowY, width - 20);
+                drawChannelRow(context, CHANNEL_NAMES[i], CHANNEL_COLORS[i], value, x + 6, rowY, width - 12);
             }
 
             if (draggingChannel >= 0) {
@@ -74,8 +76,8 @@ public class ColorComponent extends SettingComponent {
     }
 
     private void updateChannel(double mouseX, int channel) {
-        int rowX = x + 10;
-        int rowWidth = width - 20;
+        int rowX = x + 6;
+        int rowWidth = width - 12;
         float percent = (float) Math.max(0.0, Math.min(1.0, (mouseX - rowX) / rowWidth));
         int nextValue = Math.round(percent * 255f);
         Color current = (Color) setting.getValue();

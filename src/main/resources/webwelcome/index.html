@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Welcome to Oxevy</title>
+<link rel="stylesheet" href="/welcome/style.css?v=ASSET_V" />
+</head>
+<body>
+<div class="w-root">
+  <div class="w-bg"></div>
+  <div class="w-aurora"></div>
+
+  <main class="w-card" role="dialog" aria-modal="true" aria-labelledby="w-title">
+    <div class="w-brand"><span class="w-logo">OXEVY</span></div>
+
+    <h1 class="w-title" id="w-title">Welcome to Oxevy</h1>
+    <p class="w-sub">Installed and ready. Here's the short tour.</p>
+
+    <div class="w-grid">
+      <div class="w-tile"><span class="w-ico" aria-hidden="true">t</span><span class="w-label">ClickGui</span></div>
+      <div class="w-tile"><span class="w-ico" aria-hidden="true">e</span><span class="w-label">Modules</span></div>
+      <div class="w-tile"><span class="w-ico" aria-hidden="true">g</span><span class="w-label">Cosmetics</span></div>
+      <div class="w-tile"><span class="w-ico" aria-hidden="true">y</span><span class="w-label">Music</span></div>
+    </div>
+
+    <p class="w-note"><b>Right Shift</b> opens the ClickGui — bind, theme and tune everything from there.</p>
+
+    <div class="w-actions">
+      <button class="w-start" id="w-start" type="button">Get started</button>
+      <a class="w-link" href="https://discord.gg/oxevy" target="_blank" rel="noreferrer">Join the Discord</a>
+    </div>
+
+    <p class="w-hint">This screen appears once — your settings are kept from here on.</p>
+  </main>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var card = document.querySelector('.w-card');
+
+  var m = /(?:^|[#&])scale=([\d.]+)/.exec(location.hash || '');
+  var base = Math.max(0.6, parseFloat(m ? m[1] : '1') || 1);
+  var PAD = 56;
+  var raf = 0;
+
+  function fit() {
+    root.style.setProperty('--s', 1);
+    var w = card.offsetWidth + PAD;
+    var h = card.offsetHeight + PAD;
+    root.style.setProperty('--s', base);
+    var s = Math.min(base, window.innerWidth / w, window.innerHeight / h);
+    root.style.setProperty('--s', Math.max(0.45, s));
+  }
+  fit();
+  window.addEventListener('resize', function () {
+    if (raf) return;
+    raf = requestAnimationFrame(function () { raf = 0; fit(); });
+  });
+
+  var title = document.getElementById('w-title');
+  var tries = 0;
+  (function greet() {
+    fetch('/api/mainmenu/profile', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (d && d.username) title.textContent = 'Welcome, ' + d.username; })
+      .catch(function () { if (++tries < 4) setTimeout(greet, 700); });
+  })();
+
+  var btn = document.getElementById('w-start');
+  var sent = false;
+  function start() {
+    if (sent) return;
+    sent = true;
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    fetch('/api/welcome/done', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    }).catch(function () {
+      setTimeout(function () { sent = false; btn.disabled = false; btn.textContent = 'Get started'; }, 1200);
+    });
+  }
+  btn.addEventListener('click', start);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); start(); }
+  });
+})();
+</script>
+</body>
+</html>
+EOF
+echo "welcome restored"

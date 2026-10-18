@@ -1,0 +1,21 @@
+cmake_minimum_required(VERSION 3.10)
+project(oxevy-music CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(JNI REQUIRED)
+
+if(WIN32)
+    add_library(oxevy-music SHARED music_windows.cpp)
+    target_include_directories(oxevy-music PRIVATE ${JNI_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/win32)
+    target_link_options(oxevy-music PRIVATE -static-libgcc -static-libstdc++ -Wl,--kill-at)
+else()
+    add_library(oxevy-music SHARED music_linux.cpp)
+    target_include_directories(oxevy-music PRIVATE ${JNI_INCLUDE_DIRS})
+    find_package(PkgConfig)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(DBUS1 REQUIRED IMPORTED_TARGET dbus-1)
+        target_link_libraries(oxevy-music PRIVATE PkgConfig::DBUS1)
+    endif()
+endif()

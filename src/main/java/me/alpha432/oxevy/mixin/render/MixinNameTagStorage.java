@@ -2,6 +2,7 @@ package me.alpha432.oxevy.mixin.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import me.alpha432.oxevy.Oxevy;
+import me.alpha432.oxevy.features.modules.client.NickChangerModule;
 import me.alpha432.oxevy.features.modules.render.NameTagsModule;
 import net.minecraft.client.renderer.feature.NameTagFeatureRenderer;
 import net.minecraft.client.renderer.state.CameraRenderState;
@@ -20,6 +21,16 @@ public class MixinNameTagStorage {
         NameTagsModule nameTags = Oxevy.moduleManager.getModuleByClass(NameTagsModule.class);
         if (nameTags != null && nameTags.isEnabled()) {
             ci.cancel();
+            return;
+        }
+
+        NickChangerModule nickChanger = Oxevy.moduleManager.getModuleByClass(NickChangerModule.class);
+        if (nickChanger != null && nickChanger.nametags.getValue()) {
+            Component replaced = nickChanger.replace(text);
+            if (replaced != text) {
+                ((NameTagFeatureRenderer.Storage) (Object) this).add(matrices, vec3d, i, replaced, bl, j, d, state);
+                ci.cancel();
+            }
         }
     }
 }

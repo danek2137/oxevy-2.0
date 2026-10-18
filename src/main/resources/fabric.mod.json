@@ -30,6 +30,7 @@
   "depends": {
     "fabricloader": ">=${loader_version}",
     "fabric": "*",
-    "minecraft": "${minecraft_version}"
+    "minecraft": "${minecraft_version}",
+    "mcef-modern": "0.3.3+mc1.21.11.jcef146.0.10"
   }
 }

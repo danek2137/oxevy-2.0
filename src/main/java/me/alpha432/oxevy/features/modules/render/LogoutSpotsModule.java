@@ -57,6 +57,9 @@ public class LogoutSpotsModule extends Module {
 
         List<LoggedPlayer> currentPlayers = new ArrayList<>();
         for (Player player : mc.level.players()) {
+            // Blink's fake players are temporary: if they were tracked here,
+            // removing one would look like the real player logging out.
+            if (me.alpha432.oxevy.util.entity.GhostPlayerEntity.isGhost(player)) continue;
             currentPlayers.add(new LoggedPlayer(player));
         }
 
@@ -80,6 +83,7 @@ public class LogoutSpotsModule extends Module {
     private void updateLastPlayers() {
         lastPlayers.clear();
         for (Player player : mc.level.players()) {
+            if (me.alpha432.oxevy.util.entity.GhostPlayerEntity.isGhost(player)) continue;
             lastPlayers.add(new LoggedPlayer(player));
         }
     }

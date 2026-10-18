@@ -3,6 +3,7 @@ package me.alpha432.oxevy.util.render;
 import com.mojang.blaze3d.vertex.*;
 import com.mojang.math.Axis;
 import me.alpha432.oxevy.util.render.state.RectRenderState;
+import me.alpha432.oxevy.util.render.state.RoundedRectRenderState;
 import me.alpha432.oxevy.util.traits.Util;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -225,14 +226,28 @@ public class RenderUtil implements Util {
     }
 
     public static void roundRect(GuiGraphics context, float x, float y, float w, float h, float radius, int color) {
-        context.fill((int) (x + radius), (int) y, (int) (x + w - radius), (int) (y + h), color);
-        context.fill((int) x, (int) (y + radius), (int) (x + radius), (int) (y + h - radius), color);
-        context.fill((int) (x + w - radius), (int) (y + radius), (int) (x + w), (int) (y + h - radius), color);
-        
-        context.fill((int) x, (int) y, (int) (x + radius), (int) (y + radius), color);
-        context.fill((int) (x + w - radius), (int) y, (int) (x + w), (int) (y + radius), color);
-        context.fill((int) x, (int) (y + h - radius), (int) (x + radius), (int) (y + h), color);
-        context.fill((int) (x + w - radius), (int) (y + h - radius), (int) (x + w), (int) (y + h), color);
+        roundRect(context, x, y, w, h, radius, radius, radius, radius, color);
+    }
+
+    public static void roundRect(GuiGraphics context, float x, float y, float w, float h,
+            float tl, float tr, float br, float bl, int color) {
+        if (w <= 0 || h <= 0) return;
+        context.guiRenderState.submitGuiElement(new RoundedRectRenderState(
+                RenderPipelines.GUI, TextureSetup.noTexture(), new Matrix3x2f(context.pose()),
+                x, y, w, h, tl, tr, br, bl, color,
+                context.scissorStack.peek()
+        ));
+    }
+
+    /**
+     * rounded card with a visible 1px framing ring. Translucent fills on their
+     * own vanish against dark scenes, so a faint outer ring keeps the surface's
+     * silhouette legible everywhere (HUD cards, popups, gauges).
+     */
+    public static void outlinedRoundRect(GuiGraphics context, float x, float y, float w, float h,
+            float radius, int fillColor, int ringColor) {
+        roundRect(context, x - 1.0f, y - 1.0f, w + 2.0f, h + 2.0f, radius + 1.0f, ringColor);
+        roundRect(context, x, y, w, h, radius, fillColor);
     }
 
     public static void horizontalGradient(GuiGraphics context, float x1, float y1, float x2, float y2, Color left, Color right) {
@@ -292,7 +307,15 @@ public class RenderUtil implements Util {
     }
 
     public static void drawBox(PoseStack stack, AABB box, int color, float lineWidth, boolean throughWalls) {
-        Vec3 camera = getCameraPos();
+        BufferBuilder bufferBuilder = Tesselator.getInstance()
+                .begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_LINE_WIDTH);
+        writeBoxOutline(bufferBuilder, stack.last(), box, getCameraPos(), color, lineWidth);
+
+        (throughWalls ? Layers.lines() : Layers.linesDepth()).draw(bufferBuilder.buildOrThrow());
+    }
+
+    /** Writes a box's twelve edges, camera relative, into {@code bufferBuilder}. */
+    private static void writeBoxOutline(BufferBuilder bufferBuilder, PoseStack.Pose pose, AABB box, Vec3 camera, int color, float lineWidth) {
         float minX = (float) (box.minX - camera.x);
         float minY = (float) (box.minY - camera.y);
         float minZ = (float) (box.minZ - camera.z);
@@ -300,10 +323,6 @@ public class RenderUtil implements Util {
         float maxY = (float) (box.maxY - camera.y);
         float maxZ = (float) (box.maxZ - camera.z);
 
-        BufferBuilder bufferBuilder = Tesselator.getInstance()
-                .begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_LINE_WIDTH);
-        PoseStack.Pose pose = stack.last();
-
         bufferBuilder.addVertex(pose, minX, minY, minZ).setColor(color).setLineWidth(lineWidth);
         bufferBuilder.addVertex(pose, maxX, minY, minZ).setColor(color).setLineWidth(lineWidth);
         bufferBuilder.addVertex(pose, minX, minY, minZ).setColor(color).setLineWidth(lineWidth);
@@ -328,28 +347,62 @@ public class RenderUtil implements Util {
         bufferBuilder.addVertex(pose, maxX, maxY, maxZ).setColor(color).setLineWidth(lineWidth);
         bufferBuilder.addVertex(pose, maxX, maxY, minZ).setColor(color).setLineWidth(lineWidth);
         bufferBuilder.addVertex(pose, maxX, maxY, maxZ).setColor(color).setLineWidth(lineWidth);
-
-        (throughWalls ? Layers.lines() : Layers.linesDepth()).draw(bufferBuilder.buildOrThrow());
     }
 
     public static void drawOutlinedBoxes(PoseStack stack, List<AABB> boxes, int color, boolean throughWalls) {
         drawOutlinedBoxes(stack, boxes, color, throughWalls, 1.5f);
     }
 
+    /**
+     * Draws every box into a single buffer, so a list costs one draw call instead of
+     * one per box. Geometry and ordering match calling {@link #drawBox} box by box.
+     */
     public static void drawOutlinedBoxes(PoseStack stack, List<AABB> boxes, int color, boolean throughWalls, float lineWidth) {
+        if (boxes.isEmpty()) return;
+
+        BufferBuilder bufferBuilder = Tesselator.getInstance()
+                .begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_LINE_WIDTH);
+        PoseStack.Pose pose = stack.last();
+        Vec3 camera = getCameraPos();
+
         for (AABB box : boxes) {
-            drawBox(stack, box, color, lineWidth, throughWalls);
+            writeBoxOutline(bufferBuilder, pose, box, camera, color, lineWidth);
         }
+
+        (throughWalls ? Layers.lines() : Layers.linesDepth()).draw(bufferBuilder.buildOrThrow());
     }
 
+    /**
+     * Fills every box in one buffer, so a list costs one draw call instead of one per box.
+     * Fills always use {@link Layers#quads()}, i.e. they show through walls whatever
+     * {@code throughWalls} says; the flag is kept so call sites read the same as the
+     * outline variants.
+     */
     public static void drawSolidBoxes(PoseStack stack, List<AABB> boxes, int color, boolean throughWalls) {
+        if (boxes.isEmpty()) return;
+
+        BufferBuilder bufferBuilder = Tesselator.getInstance()
+                .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        PoseStack.Pose pose = stack.last();
+        Vec3 camera = getCameraPos();
+
         for (AABB box : boxes) {
-            drawBoxFilled(stack, box, color);
+            writeBoxFill(bufferBuilder, pose, box, camera, color);
         }
+
+        Layers.quads().draw(bufferBuilder.buildOrThrow());
     }
 
     public static void drawBoxFilled(PoseStack stack, AABB box, int color) {
-        Vec3 camera = getCameraPos();
+        BufferBuilder bufferBuilder = Tesselator.getInstance()
+                .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        writeBoxFill(bufferBuilder, stack.last(), box, getCameraPos(), color);
+
+        Layers.quads().draw(bufferBuilder.buildOrThrow());
+    }
+
+    /** Writes a box's six faces, camera relative, into {@code bufferBuilder}. */
+    private static void writeBoxFill(BufferBuilder bufferBuilder, PoseStack.Pose pose, AABB box, Vec3 camera, int color) {
         float minX = (float) (box.minX - camera.x);
         float minY = (float) (box.minY - camera.y);
         float minZ = (float) (box.minZ - camera.z);
@@ -357,10 +410,6 @@ public class RenderUtil implements Util {
         float maxY = (float) (box.maxY - camera.y);
         float maxZ = (float) (box.maxZ - camera.z);
 
-        BufferBuilder bufferBuilder = Tesselator.getInstance()
-                .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
-        PoseStack.Pose pose = stack.last();
-
         bufferBuilder.addVertex(pose, minX, minY, minZ).setColor(color);
         bufferBuilder.addVertex(pose, maxX, minY, minZ).setColor(color);
         bufferBuilder.addVertex(pose, maxX, minY, maxZ).setColor(color);
@@ -390,8 +439,6 @@ public class RenderUtil implements Util {
         bufferBuilder.addVertex(pose, minX, minY, maxZ).setColor(color);
         bufferBuilder.addVertex(pose, minX, maxY, maxZ).setColor(color);
         bufferBuilder.addVertex(pose, minX, maxY, minZ).setColor(color);
-
-        Layers.quads().draw(bufferBuilder.buildOrThrow());
     }
 
     public static void drawLine(PoseStack stack, Vec3 start, Vec3 end, Color color, float width, boolean throughWalls) {

@@ -12,7 +12,7 @@ public class CosmeticsModule extends Module {
     private static CosmeticsModule instance;
 
     public CosmeticsModule() {
-        super("Cosmetics", "Controls how far custom capes/skins are checked and rendered for nearby players", Category.CLIENT);
+        super("Cosmetics", "Controls how far custom capes/skins are checked and rendered for nearby players. -oxevy network needed", Category.CLIENT);
         instance = this;
     }
 

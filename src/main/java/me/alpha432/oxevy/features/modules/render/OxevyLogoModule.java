@@ -21,7 +21,7 @@ public class OxevyLogoModule extends Module {
     public final Setting<Float> scale = num("Scale", 1.0f, 0.5f, 3.0f);
 
     public OxevyLogoModule() {
-        super("OxevyLogo", "Shows Oxevy logo above other Oxevy users", Category.RENDER);
+        super("OxevyLogo", "Shows Oxevy logo above other Oxevy users. -oxevy network needed", Category.RENDER);
     }
 
     @Subscribe

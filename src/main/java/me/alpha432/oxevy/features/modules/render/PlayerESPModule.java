@@ -40,6 +40,7 @@ public class PlayerESPModule extends Module {
         for (Player player : mc.level.players()) {
             if (player == mc.player) continue;
             if (player.isRemoved()) continue;
+            if (me.alpha432.oxevy.util.entity.GhostPlayerEntity.isGhost(player)) continue;
             if (filterSleeping.getValue() && player.isSleeping()) continue;
             if (filterInvisible.getValue() && player.isInvisible()) continue;
             

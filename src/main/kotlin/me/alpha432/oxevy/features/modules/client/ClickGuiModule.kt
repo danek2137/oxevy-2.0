@@ -5,6 +5,7 @@ import me.alpha432.oxevy.event.impl.ClientEvent
 import me.alpha432.oxevy.event.system.Subscribe
 import me.alpha432.oxevy.features.commands.Command
 import me.alpha432.oxevy.features.gui.ClickGuiScreen
+import me.alpha432.oxevy.features.gui.WebClickGuiScreen
 import me.alpha432.oxevy.features.modules.Module
 import me.alpha432.oxevy.features.settings.Bind
 import me.alpha432.oxevy.features.settings.Setting
@@ -29,6 +30,9 @@ class ClickGuiModule : Module("ClickGui", "Opens the ClickGui", Module.Category.
     @JvmField val slideInAnimation: Setting<Boolean> = bool("SlideInAnimation", true)
     @JvmField val scaleAnimation: Setting<Boolean> = bool("ScaleAnimation", true)
     @JvmField val style: Setting<GuiStyle> = mode("Style", GuiStyle.THUNDERHACK)
+    @JvmField val theme: Setting<WebTheme> = mode("Theme", WebTheme.GLASS)
+    @JvmField val blur: Setting<Int> = num("Blur", 5, 0, 10)
+    @JvmField val engine: Setting<Engine> = mode("Mode", Engine.NATIVE)
 
     init {
         INSTANCE = this
@@ -75,8 +79,19 @@ class ClickGuiModule : Module("ClickGui", "Opens the ClickGui", Module.Category.
 
     override fun onEnable() {
         if (nullCheck()) return
-        Util.mc.setScreen(ClickGuiScreen.getInstance())
+        when (engine.value) {
+            Engine.NATIVE -> Util.mc.setScreen(ClickGuiScreen.getInstance())
+            Engine.BROWSER -> WebClickGuiScreen.open()
+        }
         disable()
+    }
+
+    override fun playEnableSound() {
+        // GUI_OPEN is played by ClickGuiScreen.getInstance()
+    }
+
+    override fun playDisableSound() {
+        // ClickGui disables itself right after opening, so no sound here
     }
 
     override fun onLoad() {
@@ -112,5 +127,23 @@ class ClickGuiModule : Module("ClickGui", "Opens the ClickGui", Module.Category.
         THUNDERHACK,
         OXEVY,
         METEOR
+    }
+
+    enum class Engine {
+        NATIVE,
+        BROWSER
+    }
+
+    /** Web ClickGui theme: bundles a page layout with a colour palette (the
+     *  palette itself lives in webclickgui/style.css, keyed by the lowercase
+     *  enum name; layout is passed to the page as a data-layout attribute). */
+    enum class WebTheme(val layout: String, val displayName: String, val swatch: String) {
+        GLASS("top", "Glass", "#00FF66"),
+        SIDEBAR("rail", "Sidebar", "#00FF66"),
+        MIDNIGHT("top", "Midnight", "#4F8CFF"),
+        METEOR("bottom", "Meteor", "#A46BFF"),
+        NEON("rail", "Neon", "#FF3DF0"),
+        FOCUS("list", "Focus", "#35D0FF"),
+        FROST("top", "Frost", "#0A84FF")
     }
 }

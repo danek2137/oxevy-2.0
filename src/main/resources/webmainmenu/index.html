@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oxevy Main Menu</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="/shared/configpanel.css" />
+  <script src="vendor/react.production.min.js"></script>
+  <script src="vendor/react-dom.production.min.js"></script>
+  <script src="vendor/babel.min.js"></script>
+  <script type="text/babel" src="/shared/configpanel.jsx"></script>
+  <script>
+    // Scale handling.
+    //
+    // --s-base is the GUI scale (physical framebuffer px per GUI px) handed to us
+    // in #scale=. It keeps the UI crisp: at scale 2 one design px is exactly two
+    // physical px.
+    //
+    // But the design below is authored for roughly a 1080p-scale-1 footprint, so
+    // naively multiplying every size by a GUI scale of 3 or 4 (what Minecraft's
+    // auto-scale picks on 1080p/1440p) pushes the button column hundreds of px
+    // past the bottom of the viewport and crushes the info card to zero width.
+    //
+    // So we treat --s-base as an upper bound only: we measure the natural design
+    // footprint once at scale 1, then pick the largest scale <= --s-base that still
+    // fits the viewport. Low scales stay pixel-crisp; high scales gracefully
+    // compress instead of overflowing.
+    (function () {
+      const m = (location.hash.match(/#scale=([\d.]+)/)) || [];
+      const base = Math.max(1, parseFloat(m[1]) || 1);
+      const root = document.documentElement;
+      root.style.setProperty("--s-base", base);
+
+      // Design footprint at scale 1, kept in sync with style.css.
+      // Horizontal: container padding-x*2 + button column max-width.
+      var DESIGN_W = 48 * 2 + 300;
+      var DESIGN_PAD_Y = 24 * 2;
+      var designH = 0;
+
+      function measureDesign() {
+        var col = document.querySelector(".button-column");
+        var center = document.querySelector(".menu-center");
+        if (!col || !center) return 0;
+        root.style.setProperty("--s", "1");
+        designH = center.offsetHeight;
+        return designH;
+      }
+
+      function applyFit() {
+        if (!designH) return;
+        var sW = window.innerWidth / DESIGN_W;
+        var sH = window.innerHeight / (designH + DESIGN_PAD_Y);
+        var s = Math.min(base, sW, sH);
+        // Never blow the UI up past the authored design size.
+        s = Math.max(1, s);
+        root.style.setProperty("--s", s);
+      }
+
+      window.__menuFit = function () {
+        if (!measureDesign()) { applyFit(); return; }
+        applyFit();
+      };
+
+      window.addEventListener("resize", function () {
+        // Re-fit on resize (debounced to a frame so we only reflow once).
+        if (window.__fitPending) return;
+        window.__fitPending = true;
+        requestAnimationFrame(function () {
+          window.__fitPending = false;
+          window.__menuFit();
+        });
+      });
+
+      // First fit happens once React has mounted; App calls __menuFit().
+      root.style.setProperty("--s", base);
+    })();
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+const { useState, useEffect, useCallback, memo } = React;
+
+// SVG Icons
+const Icon = memo(function Icon({ children, className = "menu-icon" }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      {children}
+    </svg>
+  );
+});
+
+// Menu background video (official Minecraft channel), streamed muted from
+// YouTube. Append #novideo to the menu URL to disable it and fall back to the
+// static gradient (useful on low-end machines - the YouTube player is heavy).
+const BG_VIDEO_ID = "RnnctM5Rf9I";
+const noVideo = /(^|[#&])novideo\b/.test(location.hash);
+
+// Static icon definitions - created once
+const icons = {
+  singleplayer: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  multiplayer: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  resourcepacks: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/></svg>,
+  cosmetics: <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><path fill="currentColor" d="M257.1 18.46c-17 19.58-32.7 35.31-55.1 42.98 41.5 68.46 139.9 119.76 241.2 62.36 18-14.1 26.7-31.45 34.9-47.34-98.9-5.45-164.8-19.81-221-58zM225 111.1c-18.9 38.3-41 72.2-65.1 100.2-40.8 47.5-87.03 78.7-132.67 85.3 6.47 19.8 10.43 59.2 25.84 72.6 45.63 18.5 132.83-9.1 164.63-38.7 16.1-16.4 24-36.6 34.2-60.9-2 35.2-13.3 56.6-27.7 72.4-18.5 18.2-36.6 30.8-59 37.8 11.9 22.3 16.8 49.7 27.7 67.8 4.4 6.7 8 9.5 14.6 9.4 42-10.9 74.4-45.9 110.9-60.5 55.3-29.3 65.3-74 67-85.5-1.1 28.7-12.7 67.5-31.7 83.6 33.8 12.4 47.5 67.3 52.3 90.2 15.2-14 33.2-35.4 48.1-60.1C473 393.5 487 357.2 487 324.2c-.3-38.8-17-76.4-26.5-118.2-5-21.7-7.7-44.7-4.6-69.3-131.7 55.7-190.9 9.4-230.9-25.6z"></path></g></svg>,
+  quit: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+  configs: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
+  cog: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>,
+};
+
+// Static buttons array - created once
+const buttons = [
+  { id: "singleplayer", label: "Singleplayer", icon: icons.singleplayer, action: "singleplayer" },
+  { id: "multiplayer", label: "Multiplayer", icon: icons.multiplayer, action: "multiplayer" },
+  { id: "resourcepacks", label: "Resource Packs", icon: icons.resourcepacks, action: "resourcepacks" },
+  { id: "configs", label: "Configs", icon: icons.configs, action: "config" },
+  { id: "options", label: "Options...", icon: icons.cog, action: "options" },
+  { id: "quit", label: "Quit Game", icon: icons.quit, action: "quit", variant: "danger" },
+];
+
+// Cosmetics button - positioned separately in bottom-right corner
+const cosmeticsButton = { id: "cosmetics", label: "Cosmetics", icon: icons.cosmetics, action: "cosmetics" };
+
+// Static footer links - created once
+const footerLinks = [
+  { label: "Website", url: "https://oxevy.daneq.workers.dev/" },
+  { label: "Discord", url: "https://discord.gg/oxevy" },
+  { label: "GitHub", url: "https://github.com/oxevy" },
+  { label: "Report Bug", url: "https://github.com/oxevy/issues" },
+];
+
+// Memoized MenuButton - only re-renders if button or onClick changes
+const MenuButton = memo(function MenuButton({ button, onClick }) {
+  return (
+    <button
+      className={`menu-button ${button.variant || ""}`}
+      onClick={() => onClick(button.action)}
+    >
+      <span className="menu-icon">{button.icon}</span>
+      <span className="menu-label">{button.label}</span>
+    </button>
+  );
+});
+
+// Memoized FooterLinks - static content, never re-renders
+const FooterLinks = memo(function FooterLinks() {
+  return (
+    <div className="footer-links">
+      {footerLinks.map((link, i) => (
+        <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer" className="footer-link">
+          {i > 0 && <span className="footer-separator">|</span>}
+          {link.label}
+        </a>
+      ))}
+    </div>
+  );
+});
+
+// Profile Preview Component - displays player's Minecraft skin and info
+const ProfilePreview = memo(function ProfilePreview({ onOpenAccounts }) {
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let attempts = 0;
+    let timer = null;
+
+    const fetchProfile = async () => {
+      try {
+        const response = await fetch("/api/mainmenu/profile", { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        if (cancelled) return;
+        setProfile(data);
+        setError(null);
+        setLoading(false);
+      } catch (err) {
+        console.error("Profile fetch error:", err);
+        // The bridge may not be up for the first beat; retry a few times before
+        // surfacing an error so a slow start doesn't flash "unavailable".
+        if (!cancelled && attempts < 4) {
+          attempts += 1;
+          timer = setTimeout(fetchProfile, 700);
+          return;
+        }
+        if (!cancelled) {
+          setError("Unable to load profile");
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchProfile();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="profile-preview loading">
+        <div className="profile-head">
+          <div className="profile-skeleton"></div>
+        </div>
+        <div className="profile-info">
+          <div className="profile-skeleton profile-skeleton-name"></div>
+          <div className="profile-skeleton profile-skeleton-discriminator"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="profile-preview error">
+        <div className="profile-error-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div className="profile-info">
+          <div className="profile-name">Profile unavailable</div>
+          <div className="profile-discriminator">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="profile-preview empty">
+        <div className="profile-head">
+          <div className="profile-skeleton"></div>
+        </div>
+        <div className="profile-info">
+          <div className="profile-skeleton profile-skeleton-name"></div>
+        </div>
+      </div>
+    );
+  }
+
+  // Head avatar from mc-heads.net. Prefer the UUID, fall back to the username
+  // (mc-heads accepts either); if both are missing we render the Steve head.
+  const skinId = profile.uuid || profile.username || "8667ba71b85a4004af544816a921c14e";
+  const skinUrl = `https://mc-heads.net/avatar/${encodeURIComponent(skinId)}/32`;
+  
+  return (
+    <div className="profile-preview" style={{ cursor: 'pointer' }} onClick={() => {
+      // Opens the accounts page as an overlay inside the menu, rather than
+      // swapping the whole MC screen out from under the main menu.
+      if (onOpenAccounts) onOpenAccounts();
+    }}>
+      <div className="profile-head">
+        <img
+          className="profile-skin-img"
+          src={skinUrl}
+          alt={`${profile.username}'s head`}
+          onError={(e) => {
+            // Fallback to default Steve head if custom head fails
+            e.target.src = "https://mc-heads.net/avatar/8667ba71b85a4004af544816a921c14e/32";
+          }}
+        />
+      </div>
+      <div className="profile-info">
+        <div className="profile-name">{profile.username}</div>
+        {profile.discriminator && (
+          <div className="profile-discriminator">#{profile.discriminator}</div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// ── base64url helpers for config share codes ───────────────────────────────
+const ConfigPanel = window.ConfigPanelLib.ConfigPanel;
+
+// Main App component with memoized callbacks
+const App = memo(function App() {
+  // "accounts" | "cosmetics" | "config" - rendered as an in-page overlay on top
+  // of the menu, so the menu never unloads underneath it.
+  const [overlay, setOverlay] = useState(null);
+  const closeOverlay = useCallback(() => setOverlay(null), []);
+  const openAccountsOverlay = useCallback(() => setOverlay("accounts"), []);
+
+  useEffect(() => {
+    if (!overlay) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setOverlay(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [overlay]);
+
+  const navigate = useCallback(async (action) => {
+    try {
+      await fetch("/api/mainmenu/navigate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action })
+      });
+    } catch (e) {
+      console.error("Navigation failed:", e);
+    }
+  }, []);
+
+  const handleButtonClick = useCallback((action) => {
+    if (action === "quit") {
+      window.close();
+    } else if (action === "accounts" || action === "cosmetics") {
+      setOverlay(action);
+    } else if (action === "config") {
+      setOverlay("config");
+    } else {
+      navigate(action);
+    }
+  }, [navigate]);
+
+  // Clamp --s so the authored footprint always fits the viewport, and re-fit
+  // whenever the window is resized. See the head script for the math.
+  useEffect(() => {
+    window.__menuFit && window.__menuFit();
+  }, []);
+
+  // ── 3D tilt: the menu buttons turn toward the cursor ───────────────────
+  //
+  // The side of a button nearest the pointer swings out toward the viewer, so it
+  // reads as a physical key turning to face you. The rotation lives on a
+  // dedicated .tilt carrier around each button, so it never fights the button's
+  // hover transform or the container's entrance animation, and the perspective
+  // it needs is declared on the ancestor (.button-column / .cosmetics-corner) -
+  // a rotation with no perspective in its ancestry just squashes flat.
+  //
+  // Three deliberate choices:
+  //   1. ONE listener and ONE rAF loop drive every button, and the loop stops as
+  //      soon as they have all settled. mcef-modern rasterises this page in
+  //      software, so anything left animating forever keeps the whole menu
+  //      repainting forever - that was the source of the main-menu lag.
+  //   2. A button's rest geometry is only ever measured while that button is
+  //      untouched. A rotated element's own bounding box grows and shrinks as it
+  //      turns, so measuring it live would feed the rotation straight back into
+  //      the calculation and make the button twitch instead of track the pointer.
+  //   3. Deflection is capped well below the 45deg of a static 3D demo. A demo
+  //      box is square and never moves; a wide button held at that angle
+  //      collapses to a sliver, so the strength here comes from the projection
+  //      rather than from an extreme rotation.
+  useEffect(() => {
+    // Respect an explicit accessibility preference - no motion at all.
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const MAX_TILT = 22;   // degrees at full deflection
+    const LIFT = 14;       // px a button pops toward the viewer while engaged
+    const REACH = 14;      // px of grace around a button, so it wakes up early
+    const EASE = 0.16;     // per-frame approach factor
+    const FAR = -1e5;      // sentinel for "the pointer is nowhere"
+    const EPS = 0.02;      // settle threshold, in degrees / px
+    const FLAT = 0.01;     // below this, snap to a clean identity transform
+
+    let raf = 0, running = false;
+    let px = FAR, py = FAR;
+    let nodes = [];
+
+    const collect = () => {
+      // Drop the engaged styling first, so a re-collect can never leave a button
+      // stuck in the tilted state.
+      for (const n of nodes) n.el.classList.remove("is-tilted");
+      nodes = Array.from(document.querySelectorAll(".tilt")).map((el) => ({
+        el: el,
+        rect: null,              // untouched geometry, refreshed while at rest
+        engaged: false,
+        wc: false,               // whether will-change is currently set
+        rx: 0, ry: 0, tz: 0,     // rotation currently applied
+        arx: 0, ary: 0, atz: 0,  // rotation being eased toward
+      }));
+    };
+    collect();
+
+    const tick = () => {
+      let busy = false;
+
+      for (const n of nodes) {
+        // Only measure the carrier while it is untouched: once it is rotated its
+        // bounding box no longer describes where the button actually sits.
+        if (!n.rect || (n.rx === 0 && n.ry === 0 && n.tz === 0)) {
+          n.rect = n.el.getBoundingClientRect();
+        }
+
+        const r = n.rect;
+        const halfW = r.width / 2 + REACH;
+        const halfH = r.height / 2 + REACH;
+        const dx = px - (r.left + r.width / 2);
+        const dy = py - (r.top + r.height / 2);
+
+        if (Math.abs(dx) > halfW || Math.abs(dy) > halfH) {
+          n.arx = 0; n.ary = 0; n.atz = 0;
+          if (n.engaged) {
+            n.engaged = false;
+            n.el.classList.remove("is-tilted");
+          }
+        } else {
+          // Normalised pointer position over the button, -1..1 per axis.
+          const nx = Math.max(-1, Math.min(1, dx / halfW));
+          const ny = Math.max(-1, Math.min(1, dy / halfH));
+          // rotateY>0 swings +x away from the viewer and rotateX>0 brings +y
+          // (down) toward it, so both signs are negated to swing the side under
+          // the cursor OUT at the viewer: the button turns toward the pointer.
+          n.ary = -nx * MAX_TILT;
+          n.arx = ny * MAX_TILT;
+          n.atz = LIFT;
+          if (!n.engaged) {
+            n.engaged = true;
+            n.el.classList.add("is-tilted");
+          }
+        }
+
+        n.rx += (n.arx - n.rx) * EASE;
+        n.ry += (n.ary - n.ry) * EASE;
+        n.tz += (n.atz - n.tz) * EASE;
+
+        const settled = Math.abs(n.arx - n.rx) < EPS &&
+                        Math.abs(n.ary - n.ry) < EPS &&
+                        Math.abs(n.atz - n.tz) < FLAT;
+        if (settled) { n.rx = n.arx; n.ry = n.ary; n.tz = n.atz; }
+        if (!settled) busy = true;
+
+        // translateZ first, so the pop happens in the parent's space and the
+        // rotations then turn the button about its own centre.
+        n.el.style.transform = (n.rx === 0 && n.ry === 0 && n.tz === 0)
+          ? ""
+          : "translateZ(" + n.tz.toFixed(2) + "px) rotateX(" + n.rx.toFixed(2) +
+            "deg) rotateY(" + n.ry.toFixed(2) + "deg)";
+
+        // Only advertise a compositing layer while something is actually moving:
+        // a permanent will-change would keep every button on its own layer for
+        // the rest of the session.
+        const wantWC = n.engaged || !settled;
+        if (wantWC !== n.wc) {
+          n.wc = wantWC;
+          n.el.style.willChange = wantWC ? "transform" : "auto";
+        }
+      }
+
+      if (!busy) { running = false; raf = 0; return; }
+      raf = requestAnimationFrame(tick);
+    };
+
+    const kick = () => {
+      if (running) return;
+      running = true;
+      raf = requestAnimationFrame(tick);
+    };
+
+    const onMove = (e) => { px = e.clientX; py = e.clientY; kick(); };
+    const onLeave = () => { px = FAR; py = FAR; kick(); };
+    // The fit pass rewrites --s, so every cached rect is stale after a resize.
+    const onResize = () => { collect(); kick(); };
+
+    window.addEventListener("mousemove", onMove, { passive: true });
+    window.addEventListener("resize", onResize);
+    document.addEventListener("mouseleave", onLeave);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("resize", onResize);
+      document.removeEventListener("mouseleave", onLeave);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  // ── "Now playing" popup ────────────────────────────────────────────────
+  //
+  // The bridge serves this from MusicPlayerHudModule, which already polls the
+  // system media player on its own daemon thread, so all this has to do is
+  // notice that the track changed.
+  //
+  // The first reply is taken as the baseline rather than shown: the popup is
+  // for switching tracks, not for opening the menu. Tracking the baseline as
+  // "" instead of "first non-empty track" also means starting playback while
+  // the menu is open does pop it, which is what you want, while merely opening
+  // the menu mid-song stays quiet.
+  //
+  // Cost is one small localhost fetch per interval, and a repaint only while the
+  // popup is on screen. Between changes the reply is byte-identical and React
+  // re-renders nothing, so the menu stays as idle as it was.
+  const [nowPlaying, setNowPlaying] = useState(null);
+
+  useEffect(() => {
+    const POLL_MS = 700;    // comfortably ahead of the module's own poll rate
+    const SHOW_MS = 5000;   // how long the popup stays up
+    const LEAVE_MS = 380;   // must match now-playing-out in the stylesheet
+
+    let cancelled = false;
+    let primed = false;     // has a baseline been taken yet
+    let lastKey = "";       // "artist|title" of the track last seen
+    let seq = 0;            // bumped per show, so React remounts and re-animates
+    let hideTimer = 0;
+    let dropTimer = 0;
+
+    const clearTimers = () => {
+      if (hideTimer) { clearTimeout(hideTimer); hideTimer = 0; }
+      if (dropTimer) { clearTimeout(dropTimer); dropTimer = 0; }
+    };
+
+    const show = (track) => {
+      clearTimers();
+      seq += 1;
+      setNowPlaying({
+        seq: seq,
+        title: track.title,
+        artist: track.artist,
+        artId: track.artId,
+        leaving: false,
+      });
+      hideTimer = window.setTimeout(() => {
+        if (cancelled) return;
+        setNowPlaying((prev) => (prev ? { ...prev, leaving: true } : prev));
+        // Unmount once the exit animation has finished, so nothing is left
+        // parked off-screen.
+        dropTimer = window.setTimeout(() => {
+          if (!cancelled) setNowPlaying(null);
+        }, LEAVE_MS);
+      }, SHOW_MS);
+    };
+
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/music/state", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !data) return;
+
+        const playing = !!data.hasTrack && !!data.title;
+        const key = playing ? (data.artist || "") + "|" + data.title : "";
+        if (!primed) { primed = true; lastKey = key; return; }
+        if (key === lastKey) return;
+        lastKey = key;
+        // Only a move *to* a track is worth announcing; stopping or pausing
+        // just clears the baseline.
+        if (playing) show(data);
+      } catch (e) {
+        // Bridge not up yet, or the request was aborted with the screen.
+      }
+    };
+
+    poll();
+    const pollTimer = window.setInterval(poll, POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(pollTimer);
+      clearTimers();
+    };
+  }, []);
+
+  // ── Now playing popup: keep it out of the column's way ──────────────────
+  //
+  // The popup sits in the left margin, and how wide that margin is depends on
+  // the button column, whose width follows the text metrics of whichever font
+  // the browser resolved for the labels. Rather than hard-code a width that
+  // could end up clipping the Singleplayer button under a different font
+  // stack, measure the column once the layout has settled and cap the popup to
+  // the space that is genuinely free.
+  useEffect(() => {
+    const fitPopup = () => {
+      const column = document.querySelector(".button-column");
+      const root = document.documentElement;
+      if (!column) return;
+      const scale = parseFloat(getComputedStyle(root).getPropertyValue("--s")) || 1;
+      // Our own left offset plus a little breathing room off the column.
+      const gutter = (20 + 8) * scale;
+      const available = column.getBoundingClientRect().left - gutter;
+      const width = Math.max(96 * scale, Math.min(148 * scale, available));
+      root.style.setProperty("--np-w", width + "px");
+    };
+    // On the frame after mount, because App runs __menuFit() in its own effect
+    // and --s is only final once that has happened.
+    const raf = requestAnimationFrame(fitPopup);
+    window.addEventListener("resize", fitPopup);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", fitPopup);
+    };
+  }, []);
+
+  return (
+    <div className="menu-root">
+      {/* Static gradient fallback - sits behind the video so it only shows
+          through when the video cannot load. */}
+      <div className="menu-bg" />
+
+      {/* Animated background: streams the official Minecraft video from YouTube,
+          muted with the player chrome hidden. */}
+      {!noVideo && (
+        <div className="menu-video" aria-hidden="true">
+          <iframe
+            src={"https://www.youtube.com/embed/" + BG_VIDEO_ID +
+                 "?autoplay=1&mute=1&loop=1&playlist=" + BG_VIDEO_ID +
+                 "&controls=0&disablekb=1&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3&fs=0&showinfo=0&cc_load_policy=0&autohide=1"}
+            title="Minecraft Soothing Scenes - Relaxing Aquarium"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
+            frameBorder="0"
+            allowFullScreen
+          />
+        </div>
+      )}
+
+      <div className="menu-scrim" />
+      <div className="menu-noise" />
+
+
+      <div className="menu-container">
+        {/* "Now playing" popup - drops in from the top when the track changes.
+            Keyed by seq so a second switch mid-popup replays the entrance
+            instead of silently swapping the text. */}
+        {nowPlaying ? (
+          <div className="now-playing-slot">
+            <div
+              key={nowPlaying.seq}
+              className={"now-playing" + (nowPlaying.leaving ? " is-leaving" : "")}
+            >
+              {/* The art sits on a note-icon background, so a missing or
+                  unreadable cover degrades to the icon instead of a hole. */}
+              <div className="np-art">
+                {nowPlaying.artId ? (
+                  <img
+                    src={"/api/music/art?t=" + nowPlaying.artId}
+                    alt=""
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  />
+                ) : null}
+              </div>
+              <div className="np-text">
+                <div className="np-kicker">Now Playing</div>
+                <div className="np-title">{nowPlaying.title}</div>
+                <div className="np-artist">{nowPlaying.artist || "Unknown artist"}</div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="menu-center">
+          {/* Profile in top-left corner */}
+          <div className="menu-profile-corner">
+            <ProfilePreview onOpenAccounts={openAccountsOverlay} />
+          </div>
+          <div className="button-column">
+            {buttons.map((button) => (
+              <div className="tilt" key={button.id}>
+                <MenuButton
+                  button={button}
+                  onClick={handleButtonClick}
+                />
+              </div>
+            ))}
+          </div>
+          <FooterLinks />
+        </div>
+
+        {/* Cosmetics button in bottom-right corner. Its .tilt carrier takes the
+            3D cursor-following rotation; see the shared effect in App. */}
+        <div className="cosmetics-corner">
+          <div className="tilt">
+            <MenuButton
+              button={cosmeticsButton}
+              onClick={handleButtonClick}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Accounts / Cosmetics - embedded as an overlay frame on top of the
+          menu instead of swapping the MC screen. Only the child page's own
+          floating .ac-window panel is shown: its full-screen stage (video,
+          wash, scrim) is stripped on load so the menu stays visible behind
+          the window, dynamic-island style. Both pages live on the same bridge
+          origin, so their window.close() can be repointed at the overlay
+          dismiss (see onLoad below). */}
+      {overlay ? (
+        <div className="web-overlay">
+          <div
+            className={"web-overlay-card wo-" + overlay}
+          >
+            {overlay === "config" ? <ConfigPanel onClose={closeOverlay} /> : (
+              <iframe
+              className="web-overlay-frame"
+              src={"/" + overlay + "/"}
+              title={overlay === "accounts" ? "Accounts" : overlay === "cosmetics" ? "Cosmetics" : "Configs"}
+              onLoad={(e) => {
+                // Same-origin: rewire the child's window.close() (a no-op in
+                // an iframe) to dismiss the overlay, and hide the child's
+                // full-page background stage so only its window panel floats
+                // over the menu. Re-runs on in-frame navigation.
+                try {
+                  const w = e.currentTarget.contentWindow;
+                  if (!w) return;
+                  w.close = closeOverlay;
+                  const d = w.document;
+                  if (d && !d.getElementById("wo-chromeless")) {
+                    const st = d.createElement("style");
+                    st.id = "wo-chromeless";
+                    st.textContent = overlay === "config"
+                      ? ".ac-stage{display:none!important}"
+                      : ".ac-stage{display:none!important}html,body{background:transparent!important}";
+                    (d.head || d.documentElement).appendChild(st);
+                  }
+                } catch (err) { /* cross-origin or torn down - ignore */ }
+              }}
+              />
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+});
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
+  </script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Oxevy Dynamic Island</title>
+  <link rel="stylesheet" href="style.css?v=ASSET_V" />
+</head>
+<body>
+  <div id="idle" class="view">
+    <div class="idle-row">
+      <div class="idle-avatar">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M17.4174 19.25V17.4167C17.4174 16.4442 17.031 15.5116 16.3433 14.8239C15.6556 14.1363 14.7229 13.75 13.7503 13.75H8.24968C7.27711 13.75 6.34437 14.1363 5.65666 14.8239C4.96895 15.5116 4.5826 16.4442 4.5826 17.4167V19.25M14.6671 6.41667C14.6671 8.44171 13.0253 10.0833 11 10.0833C8.97472 10.0833 7.33291 8.44171 7.33291 6.41667C7.33291 4.39162 8.97472 2.75 11 2.75C13.0253 2.75 14.6671 4.39162 14.6671 6.41667Z" stroke-width="2" stroke-linecap="round" stroke="white"/>
+        </svg>
+      </div>
+      <div id="coords" class="idle-text">X:— Y:— Z:—</div>
+    </div>
+  </div>
+
+  <div id="music" class="view" hidden>
+    <div class="np-row">
+      <img id="art" class="np-art" alt="" />
+      <div class="np-copy">
+        <div id="npTitle" class="np-title">—</div>
+        <div id="npArtist" class="np-artist">—</div>
+      </div>
+      <svg class="np-wave" width="27" height="26" viewBox="0 0 27 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect y="9" width="3" height="8" rx="1.5" fill="#B5F59B"/>
+        <rect x="6" y="4" width="3" height="18" rx="1.5" fill="#B5F59B"/>
+        <rect x="12" y="0.5" width="3" height="25" rx="1.5" fill="#B5F59B"/>
+        <rect x="18" y="6.5" width="3" height="13" rx="1.5" fill="#B5F59B"/>
+        <rect x="24" y="2.5" width="3" height="21" rx="1.5" fill="#B5F59B"/>
+      </svg>
+    </div>
+
+    <div class="np-progress">
+      <div id="npPos" class="np-time">0:00</div>
+      <div class="np-track">
+        <div id="npFill" class="np-fill" style="width:0%"></div>
+      </div>
+      <div id="npRem" class="np-time">−0:00</div>
+    </div>
+
+    <div class="np-controls">
+      <div class="np-spacer"></div>
+      <div class="np-buttons">
+        <svg class="np-btn" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M23 23.52C23.6667 24.48 24 24 24 22.08L24 1.92C24 9.53674e-07 23.3333 -0.48 22 0.479999L13 9.12C11.6667 11.04 11.6667 12.96 13 14.88L23 23.52ZM11 23.52C11.6667 24.48 12 24 12 22.08L12 1.92C12 9.53674e-07 11.3333 -0.48 10 0.479999L1 9.12C-0.333334 11.04 -0.333334 12.96 1 14.88L11 23.52Z" fill="white"/>
+        </svg>
+        <svg id="npPause" class="np-btn" width="29" height="29" viewBox="0 0 29 29" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M6 2H11C11.6667 2 12 2.33333 12 3V26C12 26.6667 11.6667 27 11 27H6C5.33333 27 5 26.6667 5 26V3C5 2.33333 5.33333 2 6 2ZM18 2H23C23.6667 2 24 2.33333 24 3V26C24 26.6667 23.6667 27 23 27H18C17.3333 27 17 26.6667 17 26V3C17 2.33333 17.3333 2 18 2Z" fill="white"/>
+        </svg>
+        <svg id="npPlay" class="np-btn" width="29" height="29" viewBox="0 0 29 29" fill="none" xmlns="http://www.w3.org/2000/svg" hidden>
+          <path d="M6.5 2.9V26.1C6.5 27.55 8.08 28.43 9.32 27.66L26.06 17.06C27.24 16.33 27.24 14.67 26.06 13.94L9.32 3.34C8.08 2.57 6.5 3.45 6.5 2.9Z" fill="white" transform="translate(-3.2,0) scale(0.88)"/>
+        </svg>
+        <svg class="np-btn" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1 0.48C0.333333 -0.48 0 0 0 1.92V22.08C0 24 0.666667 24.48 2 23.52L11 14.88C12.3333 12.96 12.3333 11.04 11 9.12L1 0.48ZM13 0.48C12.3333 -0.48 12 0 12 1.92V22.08C12 24 12.6667 24.48 14 23.52L23 14.88C24.3333 12.96 24.3333 11.04 23 9.12L13 0.48Z" fill="white"/>
+        </svg>
+      </div>
+      <svg class="np-airplay" width="21" height="21" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4.37454 14.875H3.49947C3.0353 14.875 2.59015 14.6906 2.26193 14.3624C1.93372 14.0342 1.74933 13.5891 1.74933 13.125V4.375C1.74933 3.91087 1.93372 3.46575 2.26193 3.13756C2.59015 2.80937 3.0353 2.625 3.49947 2.625H17.5006C17.9648 2.625 18.4099 2.80937 18.7381 3.13756C19.0663 3.46575 19.2507 3.91087 19.2507 4.375V13.125C19.2507 13.5891 19.0663 14.0342 18.7381 14.3624C18.4099 14.6906 17.9648 14.875 17.5006 14.875H16.6255M10.5 13.125L14.8754 18.375H6.12468L10.5 13.125Z" stroke-linecap="round" stroke="#8E8E93"/>
+      </svg>
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+    var idleEl = document.getElementById("idle");
+    var musicEl = document.getElementById("music");
+    var coordsEl = document.getElementById("coords");
+    var artEl = document.getElementById("art");
+    var titleEl = document.getElementById("npTitle");
+    var artistEl = document.getElementById("npArtist");
+    var posEl = document.getElementById("npPos");
+    var remEl = document.getElementById("npRem");
+    var fillEl = document.getElementById("npFill");
+    var pauseEl = document.getElementById("npPause");
+    var playEl = document.getElementById("npPlay");
+
+    function getJSON(url) {
+      return fetch(url).then(function (r) {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      });
+    }
+
+    function fmtMs(ms) {
+      if (typeof ms !== "number" || !isFinite(ms) || ms < 0) return "0:00";
+      var s = Math.floor(ms / 1000);
+      return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2);
+    }
+
+    function fmtCoord(n) {
+      return typeof n === "number" && isFinite(n) ? String(Math.round(n)) : "—";
+    }
+
+    function renderCoords(s) {
+      var p = (s && s.player) || {};
+      coordsEl.textContent = "X:" + fmtCoord(p.x) + " Y:" + fmtCoord(p.y) + " Z:" + fmtCoord(p.z);
+    }
+
+    function renderMusic(m) {
+      titleEl.textContent = (m.title || "Now playing").trim();
+      var artist = (m.artist || "").trim();
+      artistEl.textContent = artist;
+      artistEl.hidden = !artist;
+      if (m.artId) {
+        var url = "/api/music/art?t=" + encodeURIComponent(m.artId);
+        if (artEl.getAttribute("src") !== url) artEl.src = url;
+        artEl.hidden = false;
+      } else {
+        artEl.hidden = true;
+        artEl.removeAttribute("src");
+      }
+      var pos = typeof m.positionMs === "number" ? m.positionMs : 0;
+      var len = typeof m.lengthMs === "number" ? m.lengthMs : 0;
+      posEl.textContent = fmtMs(pos);
+      remEl.textContent = len > 0 ? "−" + fmtMs(Math.max(0, len - pos)) : "−0:00";
+      fillEl.style.width = (len > 0 ? Math.min(100, Math.max(0, (pos / len) * 100)) : 0) + "%";
+      pauseEl.hidden = !m.playing;
+      playEl.hidden = m.playing;
+    }
+
+    var musicMode = null;
+
+    function setMode(music) {
+      if (musicMode === music) return;
+      musicMode = music;
+      idleEl.hidden = music;
+      musicEl.hidden = !music;
+    }
+
+    function pollOnce() {
+      getJSON("/api/music/state").then(function (m) {
+        if (m && m.available && m.hasTrack) {
+          setMode(true);
+          renderMusic(m);
+          return;
+        }
+        setMode(false);
+        return getJSON("/api/island/state").then(renderCoords);
+      }).catch(function () {
+        if (musicMode === false) {
+          getJSON("/api/island/state").then(renderCoords).catch(function () {});
+        }
+      });
+    }
+
+    pollOnce();
+    window.setInterval(pollOnce, 5000);
+  </script>
+</body>
+</html>
+EOF
+echo "restored"

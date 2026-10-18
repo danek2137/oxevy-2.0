@@ -23,14 +23,15 @@ public class BindComponent extends SettingComponent {
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         Color accent = ClickGuiModule.getInstance().color.getValue();
-        RenderUtil.roundRect(context, x, y, width, height, 8f, isHovered(mouseX, mouseY) ? 0x1AFFFFFF : 0x12FFFFFF);
+        boolean hovered = isHovered(mouseX, mouseY);
+        RenderUtil.rect(context, x, y, x + width, y + height, hovered ? 0xFF1E1E30 : 0xFF1A1A28);
         int textY = y + (height - 8) / 2;
-        context.drawString(CustomFont.font(), setting.getName(), x + 10, textY, 0xFFE6E6E6);
+        context.drawString(CustomFont.font(), setting.getName(), x + 6, textY, 0xFFE6E6E6);
         String val = listening ? "..." : KeyboardUtil.getKeyName(((Bind)setting.getValue()).getKey());
         int color = listening
                 ? new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 230).getRGB()
                 : 0xFFD4D4D8;
-        context.drawString(CustomFont.font(), listening ? "Press key..." : val, x + width - 12 - CustomFont.font().width(listening ? "Press key..." : val), textY, color);
+        context.drawString(CustomFont.font(), listening ? "Press key..." : val, x + width - 6 - CustomFont.font().width(listening ? "Press key..." : val), textY, color);
     }
     @Override public boolean mouseClicked(double mx, double my, int b) {
         if (isHovered(mx, my)) {

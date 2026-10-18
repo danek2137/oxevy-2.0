@@ -1,77 +1,489 @@
-@font-face{font-family:'DynaPuff';src:url('/fonts/dynapuff-variablefont_wdth_wght.ttf') format('truetype');font-weight:100 900;font-stretch:75% 125%}
-@font-face{font-family:'Wexside';src:url('/fonts/icons.ttf') format('truetype')}
-:root{color-scheme:dark;--bg:#07090d;--panel:#0d1016;--surface:rgba(255,255,255,0.04);--hover:rgba(255,255,255,0.08);--text:#f3f5f7;--muted:#8b93a3;--line:rgba(255,255,255,0.08);--accent:#22C55E;--accent-soft:rgba(34,197,94,0.18);--accent-glow:rgba(34,197,94,0.25);--danger:#ef4444;font-family:'DynaPuff',Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:13px}
+/* ── Oxevy ClickGui themes ────────────────────────────────────────────────
+   Every colour, radius, blur and shadow the GUI paints comes from a custom
+   property declared in :root, so a theme is just a set of overrides:
+
+     [data-theme="<key>"]   palette  (key = lowercase ClickGuiModule.WebTheme)
+     [data-layout="<layout>"] structure (top | rail | bottom | list)
+
+   Both attributes are set on <html> by index.html from the ClickGui module's
+   persisted "Theme" setting. Keeping the palettes here (and not in Kotlin)
+   means adding a theme is a stylesheet edit plus one enum constant. */
+@font-face{font-family:'SF Pro';src:url('/fonts/sf_medium.ttf') format('truetype');font-weight:400 550;font-style:normal}
+@font-face{font-family:'SF Pro';src:url('/fonts/sf_bold.ttf') format('truetype');font-weight:600 850;font-style:normal}
+/* Letter-keyed pictogram font shipped with the client (assets/oxevy/fonts). */
+@font-face{font-family:'Oxevy Icons';src:url('/fonts/icons.ttf') format('truetype');font-weight:100 900;font-style:normal;font-display:block}
+
+/* ── Default palette: "Glass" (Apple liquid glass, green accent) ───────── */
+:root{
+  color-scheme:dark;
+  /* UI scale = physical framebuffer / GUI-scaled resolution, set from the
+     #scale= URL fragment. The browser surface matches the window 1:1, so all
+     design px are multiplied by --s to keep on-screen proportions identical
+     to the GUI-scaled layout while rendering at full resolution. */
+  --s:1;
+
+  /* accent */
+  --accent:#00FF66;
+  --accent-rgb:0,255,102;
+  --accent-2:#10B981;
+  --on-accent:#06210f;
+
+  /* window slab */
+  --win-bg:linear-gradient(165deg,rgba(255,255,255,.16) 0%,rgba(255,255,255,.055) 42%,rgba(255,255,255,.10) 100%);
+  --win-border:rgba(255,255,255,.22);
+  --win-top-sheen:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,0));
+  --win-shadow:inset 0 1px 0 rgba(255,255,255,.38), inset 0 -1px 0 rgba(255,255,255,.06), 0 calc(30px * var(--s)) calc(60px * var(--s)) rgba(0,0,0,.5), 0 calc(8px * var(--s)) calc(24px * var(--s)) rgba(0,0,0,.35);
+  --win-radius:26px;
+  --win-blur:24px;
+
+  /* surfaces inside the slab */
+  --glass:rgba(255,255,255,.065);
+  --glass-2:rgba(255,255,255,.045);
+  --glass-hover:rgba(255,255,255,.10);
+  --glass-active:rgba(255,255,255,.14);
+  --stroke:rgba(255,255,255,.18);
+  --stroke-soft:rgba(255,255,255,.09);
+  --track:rgba(0,0,0,.22);
+
+  /* type */
+  --txt1:rgba(255,255,255,.96);
+  --txt2:rgba(255,255,255,.68);
+  --txt3:rgba(255,255,255,.42);
+  --text-shadow:0 1px 2px rgba(0,0,0,.35);
+
+  /* floating layers (dropdowns, tooltips, keyboard, drawer) */
+  --menu-bg:rgba(14,16,20,.94);
+  --overlay:rgba(0,0,0,.75);
+  --panel-solid:rgba(12,14,19,.92);
+
+  /* controls */
+  --card-radius:11px;
+  --ctl-radius:9px;
+  --toggle-on:linear-gradient(180deg,#39d96f,#2bbd5c);
+  --focus-ring:0 0 calc(3px * var(--s)) rgba(var(--accent-rgb),.14);
+
+  /* finite sheen sweep across the slab; "none" switches it off */
+  --sheen:linear-gradient(115deg,transparent 32%,rgba(255,255,255,.055) 46%,transparent 60%);
+
+  font-family:'SF Pro',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  font-size:calc(12px * var(--s));
+}
+
+/* Midnight — deep indigo glass, cooler and darker than Glass. */
+[data-theme="midnight"]{
+  --accent:#4F8CFF; --accent-rgb:79,140,255; --accent-2:#7C5CFF; --on-accent:#04122e;
+  --win-bg:linear-gradient(165deg,rgba(130,160,255,.18) 0%,rgba(11,16,38,.80) 45%,rgba(28,38,88,.72) 100%);
+  --win-border:rgba(150,178,255,.30);
+  --win-top-sheen:linear-gradient(180deg,rgba(150,178,255,.14),rgba(150,178,255,0));
+  --glass:rgba(130,160,255,.10); --glass-2:rgba(130,160,255,.06);
+  --glass-hover:rgba(130,160,255,.17); --glass-active:rgba(130,160,255,.23);
+  --stroke:rgba(158,182,255,.30); --stroke-soft:rgba(158,182,255,.15);
+  --track:rgba(5,9,24,.55);
+  --txt1:#E9EFFF; --txt2:rgba(212,224,255,.72); --txt3:rgba(182,197,255,.46);
+  --menu-bg:rgba(10,14,32,.96); --panel-solid:rgba(9,13,30,.94);
+  --toggle-on:linear-gradient(180deg,#5b95ff,#3568d8);
+}
+
+/* Meteor — flat violet, no blur, tighter radii. */
+[data-theme="meteor"]{
+  --accent:#A46BFF; --accent-rgb:164,107,255; --accent-2:#FF7AD9; --on-accent:#170630;
+  --win-bg:linear-gradient(180deg,#1B1528 0%,#141020 55%,#1B1528 100%);
+  --win-border:rgba(255,255,255,.10);
+  --win-top-sheen:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,0));
+  --win-shadow:0 calc(24px * var(--s)) calc(52px * var(--s)) rgba(0,0,0,.62);
+  --win-blur:0px; --win-radius:14px; --card-radius:8px; --ctl-radius:7px;
+  --glass:rgba(255,255,255,.055); --glass-2:rgba(255,255,255,.03);
+  --glass-hover:rgba(164,107,255,.16); --glass-active:rgba(164,107,255,.24);
+  --stroke:rgba(164,107,255,.35); --stroke-soft:rgba(255,255,255,.08);
+  --track:rgba(0,0,0,.40);
+  --txt1:#F3ECFF; --txt2:rgba(227,215,255,.70); --txt3:rgba(201,187,236,.42);
+  --menu-bg:rgba(26,20,40,.98); --panel-solid:rgba(21,17,32,.97);
+  --toggle-on:linear-gradient(180deg,#b184ff,#7c46e0);
+  --sheen:none;
+}
+
+/* Neon — near-black with a magenta accent and cyan hairlines. */
+[data-theme="neon"]{
+  --accent:#FF3DF0; --accent-rgb:255,61,240; --accent-2:#2BF5FF; --on-accent:#21001F;
+  --win-bg:linear-gradient(160deg,rgba(255,61,240,.12) 0%,rgba(8,4,14,.94) 45%,rgba(22,4,28,.90) 100%);
+  --win-border:rgba(255,61,240,.45);
+  --win-top-sheen:linear-gradient(180deg,rgba(255,61,240,.10),rgba(255,61,240,0));
+  --win-shadow:0 0 calc(26px * var(--s)) rgba(255,61,240,.16), 0 calc(24px * var(--s)) calc(60px * var(--s)) rgba(0,0,0,.72);
+  --win-blur:10px;
+  --glass:rgba(255,61,240,.07); --glass-2:rgba(43,245,255,.05);
+  --glass-hover:rgba(255,61,240,.15); --glass-active:rgba(255,61,240,.21);
+  --stroke:rgba(255,61,240,.38); --stroke-soft:rgba(43,245,255,.16);
+  --track:rgba(0,0,0,.50);
+  --txt1:#F7EEFF; --txt2:rgba(242,212,255,.74); --txt3:rgba(202,162,222,.46);
+  --menu-bg:rgba(14,4,20,.97); --panel-solid:rgba(12,3,18,.96);
+  --toggle-on:linear-gradient(180deg,#ff6ef5,#c81ab4);
+}
+
+/* Focus — one column, settings slide over the list (layout "list"). */
+[data-theme="focus"]{
+  --accent:#35D0FF; --accent-rgb:53,208,255; --accent-2:#7AF7C8; --on-accent:#04202B;
+  --win-bg:linear-gradient(170deg,rgba(255,255,255,.10),rgba(7,13,19,.88));
+  --win-border:rgba(53,208,255,.30);
+  --win-top-sheen:linear-gradient(180deg,rgba(53,208,255,.10),rgba(53,208,255,0));
+  --glass:rgba(53,208,255,.08); --glass-2:rgba(53,208,255,.04);
+  --glass-hover:rgba(53,208,255,.15); --glass-active:rgba(53,208,255,.22);
+  --stroke:rgba(53,208,255,.28); --stroke-soft:rgba(53,208,255,.13);
+  --track:rgba(0,0,0,.35);
+  --txt1:#EAF6FF; --txt2:rgba(206,232,248,.70); --txt3:rgba(170,200,220,.44);
+  --menu-bg:rgba(8,14,20,.96); --panel-solid:rgba(6,12,18,.94);
+  --win-blur:18px;
+  --toggle-on:linear-gradient(180deg,#4fd8ff,#1fa6d8);
+}
+
+/* Frost — light palette. Text shadows go away; hairlines turn dark. */
+[data-theme="frost"]{
+  color-scheme:light;
+  --accent:#0A84FF; --accent-rgb:10,132,255; --accent-2:#30D158; --on-accent:#FFFFFF;
+  --win-bg:linear-gradient(165deg,rgba(255,255,255,.94) 0%,rgba(240,245,252,.88) 45%,rgba(228,237,248,.92) 100%);
+  --win-border:rgba(20,32,54,.14);
+  --win-top-sheen:linear-gradient(180deg,rgba(255,255,255,.60),rgba(255,255,255,0));
+  --win-shadow:0 calc(26px * var(--s)) calc(58px * var(--s)) rgba(12,22,42,.35), 0 calc(6px * var(--s)) calc(18px * var(--s)) rgba(12,22,42,.18);
+  --glass:rgba(16,28,48,.05); --glass-2:rgba(16,28,48,.035);
+  --glass-hover:rgba(16,28,48,.09); --glass-active:rgba(10,132,255,.14);
+  --stroke:rgba(16,28,48,.20); --stroke-soft:rgba(16,28,48,.10);
+  --track:rgba(16,28,48,.06);
+  --txt1:#0E1726; --txt2:rgba(14,23,38,.66); --txt3:rgba(14,23,38,.44);
+  --text-shadow:none;
+  --menu-bg:rgba(255,255,255,.98); --overlay:rgba(20,30,50,.45); --panel-solid:rgba(250,252,255,.97);
+  --toggle-on:linear-gradient(180deg,#0a84ff,#0468cf);
+  --sheen:none;
+}
+
 *{box-sizing:border-box;margin:0;padding:0}
-body{margin:0;min-height:100vh;background:radial-gradient(circle at top right,rgba(34,197,94,0.12),transparent 28%),radial-gradient(circle at bottom left,rgba(34,197,94,0.08),transparent 24%),var(--bg);color:var(--text)}
 button,input,select{font:inherit;color:inherit;background:transparent;border:0;cursor:pointer;outline:none}
-#root{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-.loading{color:var(--muted);font-size:16px}
-.shell{width:min(1320px,100%);min-height:720px;display:grid;grid-template-columns:76px minmax(420px,1fr) 320px;gap:14px}
-.sidebar{background:rgba(13,16,22,0.96);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:10px;box-shadow:0 24px 70px rgba(0,0,0,0.45)}
-.brand{margin-bottom:6px}
-.brand-mark{width:42px;height:42px;border-radius:8px;background:linear-gradient(135deg,rgba(34,197,94,0.95),rgba(16,120,60,0.95));display:grid;place-items:center;font-weight:800;font-size:16px}
-.sidebar-list{display:flex;flex-direction:column;gap:8px;align-items:center}
-.sidebar-item{position:relative;width:44px;height:44px;border-radius:8px;display:grid;place-items:center;background:var(--surface);color:#d8dbe1;font-size:18px;transition:background 120ms,transform 120ms;font-family:'Wexside',sans-serif}
-.sidebar-item:hover{background:var(--hover);transform:translateY(-1px)}
-.sidebar-item.active{background:var(--accent);color:#fff}
-.sidebar-item .icon-label{font-family:'DynaPuff',Inter,system-ui,sans-serif;font-size:9px;position:absolute;bottom:2px;left:50%;transform:translateX(-50%);opacity:0;transition:opacity 120ms}
-.sidebar-item:hover .icon-label{opacity:1}
-.sidebar-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#16a34a;color:#fff;font-size:10px;display:grid;place-items:center}
-.main-panel{background:rgba(13,16,22,0.96);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-width:0;box-shadow:0 24px 70px rgba(0,0,0,0.45)}
-.panel-head{display:flex;align-items:center;padding:16px 18px 12px;border-bottom:1px solid var(--line)}
-.panel-head h1{font-size:18px;font-weight:600}
-.panel-head p{color:var(--muted);font-size:12px;margin-top:2px}
-.search-wrap{position:relative;padding:10px 18px 6px}
-.search{width:100%;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);padding:0 32px 0 12px}
-.search-clear{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:4px;display:grid;place-items:center;font-size:12px;color:var(--muted);transition:background 120ms,color 120ms}
-.search-clear:hover{background:var(--hover);color:var(--text)}
-.module-list{flex:1;overflow:auto;padding:10px 18px 18px;display:flex;flex-direction:column;gap:8px}
-.card{display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:10px 12px;border-radius:8px;border:1px solid transparent;background:var(--surface);transition:background 120ms,border-color 120ms}
-.card:hover{background:var(--hover)}
-.card.on{background:rgba(26,42,30,0.82);border-color:rgba(34,197,94,0.35)}
-.card.selected{border-color:var(--accent);background:var(--accent-soft)}
-.card-main{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
-.card-body{display:flex;flex-direction:column;gap:2px;cursor:pointer;min-width:0;flex:1}
-.card-body strong{font-size:14px;font-weight:500}
-.card-body span{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card-extra{display:flex;align-items:center;gap:8px}
-.toggle{width:32px;height:18px;border-radius:999px;background:rgba(255,255,255,0.14);position:relative;flex-shrink:0;transition:background 120ms}
-.toggle.on{background:var(--accent)}
-.toggle-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform 120ms}
-.toggle.on .toggle-thumb{transform:translateX(14px)}
-.badge{height:22px;padding:0 8px;border-radius:999px;background:rgba(255,255,255,0.06);color:#c9ced8;display:inline-flex;align-items:center;font-size:10px;letter-spacing:.02em}
-.btn-icon{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;color:var(--muted);transition:background 120ms,color 120ms}
-.btn-icon:hover{background:var(--hover);color:var(--text)}
-.btn{height:30px;padding:0 10px;border-radius:6px;background:var(--surface);border:1px solid var(--line);font-size:12px;transition:background 120ms}
-.btn:hover{background:var(--hover)}
-.drawer{background:rgba(13,16,22,0.96);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-width:0;box-shadow:0 24px 70px rgba(0,0,0,0.45)}
-.drawer-empty{display:grid;place-items:center;color:var(--muted);min-height:720px;font-size:13px}
-.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;border-bottom:1px solid var(--line)}
-.drawer-head h2{font-size:16px;font-weight:600}
-.drawer-body{overflow:auto;padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px}
-.setting{border:1px solid var(--line);border-radius:8px;padding:10px;background:rgba(255,255,255,0.03)}
-.setting>span{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:8px}
-.setting>span em{font-style:normal;color:var(--muted);font-size:12px}
-.setting input[type="text"],.setting select{width:100%;height:32px;border-radius:6px;border:1px solid var(--line);background:var(--surface);padding:0 10px}
-.setting input[type="range"]{width:100%}
-.setting-actions{display:flex;gap:6px}
-.color-row{display:grid;grid-template-columns:16px 1fr 28px;gap:6px;align-items:center;margin-top:6px}
-.swatch{width:16px;height:16px;border-radius:3px}
-.empty{color:var(--muted);text-align:center;padding:24px;font-size:13px}
-.cape-btn{position:relative;margin-top:4px}
-.cape-container{flex:1;overflow:auto;padding:16px 18px}
-.cape-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px}
-.cape-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px;border-radius:8px;border:2px solid transparent;background:var(--surface);cursor:pointer;transition:border-color 120ms,background 120ms}
-.cape-card:hover{background:var(--hover)}
-.cape-card.active{border-color:var(--accent);background:var(--accent-soft)}
-.cape-thumb-wrap{width:100%;aspect-ratio:64/32;border-radius:6px;overflow:hidden;background:rgba(0,0,0,0.3)}
-.cape-thumb{width:100%;height:100%;object-fit:cover;display:block}
-.cape-name{font-size:12px;color:var(--muted);text-align:center;word-break:break-all;max-width:100%}
-.cape-badge{font-size:10px;padding:2px 6px;border-radius:999px;background:var(--accent);color:#fff}
-.cape-layout{display:flex;flex:1;overflow:hidden}
-.cape-list-col{flex:1;overflow:auto;padding:12px 14px}
-.cape-preview-col{width:340px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:12px;border-left:1px solid var(--line)}
-.cape-3d-preview{width:100%;height:240px;border-radius:10px;overflow:hidden;background:var(--panel)}
-@media(max-width:1180px){.shell{grid-template-columns:76px 1fr}.drawer{position:fixed;top:24px;right:24px;bottom:24px;width:min(320px,calc(100vw - 48px))}}
-@media(max-width:768px){.shell{grid-template-columns:60px 1fr}.sidebar-item{width:36px;height:36px;font-size:16px}.brand-mark{width:36px;height:36px;font-size:14px}}
-@media(max-width:480px){.shell{grid-template-columns:1fr}.sidebar{display:none}.main-panel{order:1}}
+html{height:100%}
+body{margin:0;height:100%;overflow:hidden;background:transparent;color:var(--txt1)}
+#root{height:100%;display:flex;align-items:center;justify-content:center;padding:calc(20px * var(--s))}
+::selection{background:rgba(var(--accent-rgb),.35)}
+.loading{color:var(--txt2);font-size:calc(13px * var(--s));text-shadow:var(--text-shadow);animation:loading-pulse 1.4s ease-in-out 3}
+
+/* ── Window: the main glass slab ───────────────────── */
+.window{width:calc(620px * var(--s));height:calc(420px * var(--s));display:flex;flex-direction:column;position:relative;overflow:hidden;user-select:none;contain:layout paint style;
+  border-radius:calc(var(--win-radius) * var(--s));
+  background:var(--win-bg);
+  border:1px solid var(--win-border);
+  box-shadow:var(--win-shadow);
+  backdrop-filter:blur(calc(var(--win-blur) * var(--s))) saturate(1.6) brightness(1.04);
+  -webkit-backdrop-filter:blur(calc(var(--win-blur) * var(--s))) saturate(1.6) brightness(1.04);
+  animation:window-in .55s cubic-bezier(.22,1,.36,1) backwards;
+}
+.window::before{content:"";position:absolute;inset:0 0 auto 0;height:58%;background:var(--win-top-sheen);pointer-events:none;border-radius:calc(var(--win-radius) * var(--s)) calc(var(--win-radius) * var(--s)) 0 0;z-index:1}
+/* One short sheen sweep shortly after opening (finite: an infinite animation
+   forces a CEF repaint every frame, which is the main FPS killer). Every frame
+   of it re-rasterises the whole window slab in software, so keep it brief -
+   the old 7s sweep paid ~420 full-slab repaints per open. Themes that are not
+   glass set --sheen to none to skip it entirely. */
+.window::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;background:var(--sheen);transform:translateX(-120%);animation:sheen 1.4s ease-in-out .25s 1}
+.window-wrap{transform-origin:center}
+.window-wrap.dragging{cursor:grabbing;user-select:none;will-change:transform}
+
+/* ── Tab bar ───────────────────────────────────────── */
+.tabbar{height:calc(44px * var(--s));display:flex;align-items:center;border-bottom:1px solid var(--stroke-soft);flex-shrink:0;position:relative;z-index:2;padding:calc(8px * var(--s)) calc(10px * var(--s)) 0}
+/* overflow must stay visible: the tab tooltip escapes to the right of its tab */
+.tabs{display:flex;align-items:center;gap:calc(2px * var(--s));flex:1;min-width:0;overflow:visible;justify-content:center}
+.drag-grip,.theme-btn,.close-btn{margin-left:calc(10px * var(--s))}
+.tab{position:relative;display:flex;align-items:center;justify-content:center;gap:calc(4px * var(--s));padding:0 calc(9px * var(--s));min-width:calc(30px * var(--s));height:calc(26px * var(--s));border-radius:calc(var(--ctl-radius) * var(--s));background:var(--glass);color:var(--txt2);white-space:nowrap;font-size:calc(11px * var(--s));text-shadow:var(--text-shadow);transition:background 140ms,color 140ms}
+/* Category pictogram: a letter rendered through the client's icon font */
+.tab-icon{font-family:'Oxevy Icons';font-size:calc(15px * var(--s));line-height:1;pointer-events:none}
+/* Name, revealed to the right of the tab on hover or keyboard focus */
+.tab-tip{position:absolute;left:calc(100% + 6px * var(--s));top:50%;transform:translateY(-50%) translateX(calc(-3px * var(--s)));padding:calc(3px * var(--s)) calc(9px * var(--s));border-radius:calc(7px * var(--s));background:var(--menu-bg);border:1px solid var(--stroke-soft);box-shadow:0 calc(4px * var(--s)) calc(12px * var(--s)) rgba(0,0,0,.45);color:var(--txt1);font-size:calc(11px * var(--s));font-weight:600;white-space:nowrap;opacity:0;pointer-events:none;z-index:12;transition:opacity 110ms ease,transform 130ms cubic-bezier(.22,1,.36,1)}
+.tab:hover .tab-tip,.tab:focus-visible .tab-tip{opacity:1;transform:translateY(-50%) translateX(0)}
+.tab:hover{color:var(--txt1);background:var(--glass-hover)}
+.tab.active{color:var(--txt1);font-weight:600;background:var(--glass-active);box-shadow:inset 0 1px 0 rgba(255,255,255,.22);animation:tab-pop .28s cubic-bezier(.3,1.4,.5,1)}
+.tab-count{font-size:calc(9px * var(--s));font-weight:700;color:var(--on-accent);background:linear-gradient(180deg,var(--accent),var(--accent-2));border-radius:999px;padding:0 calc(5px * var(--s));line-height:calc(13px * var(--s));box-shadow:inset 0 1px 0 rgba(255,255,255,.45);animation:count-in .3s cubic-bezier(.3,1.4,.5,1) backwards}
+.drag-grip{flex-shrink:0;cursor:grab;color:var(--txt3);font-size:calc(14px * var(--s));line-height:calc(26px * var(--s));padding:0 calc(4px * var(--s)) 0 calc(10px * var(--s));text-align:center;user-select:none;transition:color 120ms}
+.drag-grip:hover{color:var(--txt1)}
+.drag-grip:active,.drag-grip.dragging{cursor:grabbing;color:var(--txt1)}
+.close-btn{flex-shrink:0;width:calc(26px * var(--s));height:calc(26px * var(--s));border-radius:calc(var(--ctl-radius) * var(--s));display:grid;place-items:center;color:var(--txt3);font-size:calc(14px * var(--s));transition:color 120ms,background 120ms}
+.close-btn:hover{color:var(--txt1);background:var(--glass-hover)}
+.close-btn:active{transform:scale(.92)}
+
+/* Theme picker button + its menu rows (menu chrome reuses .enum-*) */
+.theme-btn{flex-shrink:0;width:calc(26px * var(--s));height:calc(26px * var(--s));border-radius:calc(var(--ctl-radius) * var(--s));display:grid;place-items:center;color:var(--txt3);transition:color 120ms,background 120ms}
+.theme-btn:hover,.theme-btn.open{color:var(--txt1);background:var(--glass-hover)}
+.theme-btn:active{transform:scale(.92)}
+.theme-btn svg{width:calc(14px * var(--s));height:calc(14px * var(--s));display:block}
+.theme-swatch{width:calc(11px * var(--s));height:calc(11px * var(--s));border-radius:50%;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(127,127,127,.45)}
+.theme-tag{margin-left:auto;font-size:calc(9px * var(--s));letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}
+.theme-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── Body: module list + settings ─────────────────── */
+.body{flex:1;display:flex;min-height:0;position:relative;z-index:2}
+/* Host for the shared ConfigPanel on the synthetic "Configs" tab. The panel
+   supplies its own glass window (.cfg-win), so the host only has to fill the
+   body and let it stretch - plus hand the panel the three theme vars the
+   ClickGui's own :root doesn't define (the main menu defines all of them on
+   its :root, it needs no help). Literal values on the WRAPPER: re-declaring
+   them with var(--x,var(--x,...)) on .cfg-win itself is a self-reference
+   cycle, which Chromium invalidates, and then every calc(... * var(--s))
+   inside the panel collapses - no rounded corners, no sizing. */
+.configs-host{flex:1;min-height:0;display:flex;padding:calc(10px * var(--s));
+  --glass-strong:rgba(255,255,255,.1);
+  --stroke-hover:rgba(255,255,255,.3);
+  --danger:#FF3333}
+.configs-host>.cfg-win{flex:1;min-width:0}
+.module-col{width:calc(270px * var(--s));flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--stroke-soft);min-height:0;padding:calc(10px * var(--s)) calc(10px * var(--s)) 0}
+.search-row{padding:0 0 calc(10px * var(--s))}
+.search{width:100%;height:calc(26px * var(--s));background:var(--track);border:1px solid var(--stroke-soft);border-radius:calc(var(--ctl-radius) * var(--s));color:var(--txt1);padding:0 calc(10px * var(--s));font-size:calc(11px * var(--s));transition:border 150ms,background 150ms}
+.search:hover{border-color:var(--stroke)}
+.search::placeholder{color:var(--txt3)}
+.search:focus{border-color:var(--stroke);background:var(--track);box-shadow:var(--focus-ring)}
+.module-list{flex:1;overflow-y:auto;margin:0 calc(-4px * var(--s));padding:calc(2px * var(--s)) calc(4px * var(--s)) calc(10px * var(--s));display:flex;flex-direction:column;gap:calc(3px * var(--s));animation:list-in .18s cubic-bezier(.22,1,.36,1) backwards}
+/* No will-change here: "contents" promotes the whole scroller and turns every
+   card toggle into a full-list re-raster in CEF's software renderer; the
+   per-card contain:paint below already bounds the damage. */
+
+/* ── Module cards ──────────────────────────────────── */
+.card{position:relative;display:flex;align-items:center;gap:calc(7px * var(--s));min-height:calc(32px * var(--s));padding:0 calc(8px * var(--s)) 0 calc(12px * var(--s));border-radius:calc(var(--card-radius) * var(--s));background:var(--glass);border:1px solid transparent;cursor:default;contain:layout paint;transition:background 120ms,border 120ms,transform 140ms cubic-bezier(.22,1,.36,1);animation:card-in .24s ease-out backwards;animation-delay:calc(min(var(--i,0),8)*12ms + 40ms)}
+.card::before{content:"";position:absolute;left:0;top:calc(8px * var(--s));bottom:calc(8px * var(--s));width:calc(3px * var(--s));border-radius:calc(3px * var(--s));background:transparent}
+.card:hover{background:var(--glass-hover);border-color:var(--stroke-soft)}
+.card.selected{background:var(--glass-active);border-color:var(--stroke);box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
+.card.on::before{background:var(--accent)}
+.card.on{box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+.card-name{flex:1;min-width:0;font-size:calc(12px * var(--s));color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;text-shadow:var(--text-shadow);transition:color 120ms}
+.card.on .card-name{color:var(--txt1);font-weight:600}
+.bind-badge{font-size:calc(9px * var(--s));font-weight:600;color:var(--txt2);background:var(--glass-hover);border:1px solid var(--stroke-soft);padding:calc(1px * var(--s)) calc(5px * var(--s));border-radius:calc(6px * var(--s));line-height:calc(13px * var(--s));letter-spacing:.05em}
+.card-desc{display:none;position:absolute;top:calc(100% + 4px * var(--s));left:calc(10px * var(--s));right:calc(8px * var(--s));z-index:5;padding:calc(6px * var(--s)) calc(8px * var(--s));font-size:calc(10px * var(--s));line-height:calc(14px * var(--s));color:var(--txt2);border-radius:calc(var(--ctl-radius) * var(--s));background:var(--menu-bg);border:1px solid var(--stroke-soft);white-space:normal;box-shadow:0 calc(8px * var(--s)) calc(20px * var(--s)) rgba(0,0,0,.4);pointer-events:none}
+.card:hover .card-desc{display:block;animation:desc-in .18s ease-out}
+
+/* ── Toggle pill (iOS style) ───────────────────────── */
+.toggle{width:calc(34px * var(--s));height:calc(20px * var(--s));border-radius:999px;background:var(--glass-hover);position:relative;flex-shrink:0;transition:background 160ms;box-shadow:inset 0 1px 2px rgba(0,0,0,.28), inset 0 0 0 1px var(--stroke-soft)}
+.toggle-thumb{position:absolute;top:calc(2px * var(--s));left:calc(2px * var(--s));width:calc(16px * var(--s));height:calc(16px * var(--s));border-radius:50%;background:rgba(255,255,255,.96);box-shadow:0 1px 3px rgba(0,0,0,.4), inset 0 -1px 0 rgba(0,0,0,.08);transition:left 180ms cubic-bezier(.3,1.4,.5,1),transform 120ms}
+.toggle.on{background:var(--toggle-on);box-shadow:inset 0 1px 2px rgba(0,0,0,.15), inset 0 0 0 1px rgba(255,255,255,.25)}
+.toggle.on .toggle-thumb{left:calc(16px * var(--s))}
+.toggle:active .toggle-thumb{transform:scale(.8)}
+
+/* ── Settings panel ────────────────────────────────── */
+.settings{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;padding:calc(10px * var(--s)) calc(10px * var(--s)) 0;animation:panel-in .3s cubic-bezier(.22,1,.36,1) backwards;position:relative;z-index:6}
+.settings-head{display:flex;align-items:center;justify-content:space-between;padding:calc(2px * var(--s)) calc(2px * var(--s)) calc(10px * var(--s));border-bottom:1px solid var(--stroke-soft);flex-shrink:0}
+.settings-head h2{font-size:calc(13px * var(--s));font-weight:700;color:var(--txt1);letter-spacing:.01em;text-shadow:var(--text-shadow)}
+.settings-body{flex:1;overflow-y:auto;padding:calc(10px * var(--s)) calc(2px * var(--s)) calc(10px * var(--s));display:flex;flex-direction:column;gap:calc(6px * var(--s))}
+.setting{border:1px solid var(--stroke-soft);border-radius:calc(var(--ctl-radius) * var(--s) + 1px);padding:calc(8px * var(--s)) calc(9px * var(--s));background:var(--glass);contain:layout paint}
+.setting.row{display:flex;align-items:center;justify-content:space-between;gap:calc(8px * var(--s))}
+.setting>span{display:flex;align-items:center;justify-content:space-between;gap:calc(8px * var(--s));font-size:calc(11px * var(--s));margin-bottom:calc(6px * var(--s));color:var(--txt2)}
+.setting.row>span{margin-bottom:0}
+.setting>span em{font-style:normal;color:var(--txt1);font-size:calc(11px * var(--s));font-weight:600;background:var(--track);border:1px solid var(--stroke-soft);padding:calc(1px * var(--s)) calc(6px * var(--s));border-radius:calc(6px * var(--s))}
+.setting input[type="text"],.setting select{width:100%;height:calc(24px * var(--s));background:var(--track);border:1px solid var(--stroke-soft);border-radius:calc(7px * var(--s));padding:0 calc(7px * var(--s));font-size:calc(11px * var(--s));color:var(--txt1)}
+.setting input[type="text"]:focus,.setting select:focus{border-color:var(--stroke)}
+.setting input[type="range"]{width:100%;accent-color:var(--accent)}
+.setting-actions{display:flex;gap:calc(6px * var(--s))}
+.color-row{display:grid;grid-template-columns:calc(12px * var(--s)) 1fr calc(24px * var(--s));gap:calc(6px * var(--s));align-items:center;margin-top:calc(5px * var(--s))}
+.swatch{width:calc(12px * var(--s));height:calc(12px * var(--s));border-radius:calc(4px * var(--s));box-shadow:inset 0 0 0 1px rgba(127,127,127,.35)}
+.btn-icon{width:calc(24px * var(--s));height:calc(24px * var(--s));display:grid;place-items:center;color:var(--txt2);border-radius:calc(8px * var(--s));transition:background 120ms,color 120ms}
+.btn-icon:hover{color:var(--txt1);background:var(--glass-hover)}
+.btn{height:calc(22px * var(--s));padding:0 calc(9px * var(--s));border-radius:calc(7px * var(--s));background:var(--glass-hover);border:1px solid var(--stroke-soft);font-size:calc(11px * var(--s));color:var(--txt1);transition:background 120ms}
+.btn:hover{background:var(--glass-active)}
+
+/* ── Footer ────────────────────────────────────────── */
+.footer{height:calc(20px * var(--s));display:flex;align-items:center;justify-content:space-between;padding:calc(2px * var(--s)) calc(14px * var(--s)) calc(10px * var(--s));font-size:calc(10px * var(--s));color:var(--txt3);flex-shrink:0;margin-top:calc(6px * var(--s));position:relative;z-index:2}
+.brand-foot{letter-spacing:.2em;font-weight:800;color:var(--txt2);font-size:calc(11px * var(--s));text-shadow:var(--text-shadow)}
+
+.empty{color:var(--txt3);text-align:center;padding:calc(24px * var(--s));font-size:calc(12px * var(--s))}
+
+/* scrollbars */
+::-webkit-scrollbar{width:calc(5px * var(--s));height:calc(5px * var(--s))}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--stroke);border-radius:999px}
+::-webkit-scrollbar-thumb:hover{background:var(--stroke-hover,rgba(127,127,127,.45))}
+
+/* Narrow-window (compact) layout. Driven by the .compact class from the page
+   bootstrap, NOT a max-width media query: the ClickGui is rasterised at a
+   fraction of the framebuffer (PAGE_SCALE), so CSS pixels are smaller than
+   physical pixels and a media query would trip on windows that are wide
+   enough. The bootstrap divides innerWidth by the #raster= fraction the host
+   passes and toggles the class at the same 700px physical threshold. */
+.compact #root{padding:8px}
+.compact .window{width:100%;height:100%;border-radius:calc(20px * var(--s))}
+.compact .window::before{border-radius:calc(20px * var(--s)) calc(20px * var(--s)) 0 0}
+.compact .body{flex-direction:column}
+.compact .module-col{width:100%;max-height:50%;border-right:none;border-bottom:1px solid var(--stroke-soft)}
+.compact .tabbar{height:calc(40px * var(--s))}
+
+/* ══════════════════════════════════════════════════════════════════════
+   LAYOUTS
+
+   The window's flex children are .tabbar, .body and .footer (the React
+   fragment emits body+footer as siblings). "rail" therefore switches to a
+   two-column grid - rail spanning both rows - while "bottom" stays a column
+   and just reorders the bar, so nothing needs a wrapper element.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* rail — vertical tab rail down the left edge (like the Sidebar theme) */
+[data-layout="rail"] .window{display:grid;grid-template-columns:auto 1fr;grid-template-rows:1fr auto}
+[data-layout="rail"] .tabbar{grid-column:1;grid-row:1 / span 2;width:calc(52px * var(--s));height:auto;flex-direction:column;align-items:center;gap:calc(3px * var(--s));padding:calc(10px * var(--s)) 0;border-bottom:none;border-right:1px solid var(--stroke-soft)}
+[data-layout="rail"] .tabs{flex:1 1 auto;flex-direction:column;justify-content:flex-start;align-items:center;gap:calc(3px * var(--s));width:100%}
+[data-layout="rail"] .tab{width:calc(34px * var(--s));min-width:0;padding:0;height:calc(30px * var(--s));position:relative;overflow:visible}
+[data-layout="rail"] .tab-count{position:absolute;top:calc(2px * var(--s));right:calc(2px * var(--s));font-size:calc(8px * var(--s));padding:0 calc(3px * var(--s));line-height:calc(11px * var(--s))}
+[data-layout="rail"] .body{grid-column:2;grid-row:1}
+[data-layout="rail"] .footer{grid-column:2;grid-row:2}
+/* the grip/theme/close controls fall to the bottom of the rail */
+[data-layout="rail"] .drag-grip,[data-layout="rail"] .theme-btn,[data-layout="rail"] .close-btn{margin-left:0;margin-top:auto}
+[data-layout="rail"] .theme-btn,[data-layout="rail"] .close-btn{margin-top:calc(3px * var(--s))}
+[data-layout="rail"] .drag-grip{margin-top:auto;line-height:1;padding:calc(6px * var(--s)) 0}
+[data-layout="rail"] .module-col{width:calc(250px * var(--s))}
+
+/* bottom — tab bar under the content (like the Meteor theme) */
+[data-layout="bottom"] .body{order:1}
+[data-layout="bottom"] .footer{order:2}
+[data-layout="bottom"] .tabbar{order:3;border-bottom:none;border-top:1px solid var(--stroke-soft);padding:0 calc(10px * var(--s)) calc(8px * var(--s))}
+[data-layout="bottom"] .footer{margin-top:0}
+
+/* list — one column; the settings panel slides over the module list.
+   :has() hides the panel while no module is selected, otherwise its
+   "Select a module" placeholder would cover the list it is meant to serve. */
+[data-layout="list"] .module-col{width:100%;border-right:none}
+[data-layout="list"] .settings{position:absolute;inset:0;background:var(--panel-solid);backdrop-filter:blur(calc(var(--win-blur) * var(--s)));-webkit-backdrop-filter:blur(calc(var(--win-blur) * var(--s)));animation:drawer-in .26s cubic-bezier(.22,1,.36,1) backwards}
+[data-layout="list"] .settings:has(.empty){display:none}
+[data-layout="list"] .settings-head{border-bottom:1px solid var(--stroke-soft)}
+@keyframes drawer-in{from{opacity:0;transform:translateX(calc(18px * var(--s)))}to{opacity:1;transform:none}}
+
+@media (prefers-reduced-motion:reduce){
+  .window,.module-list,.module-list .card,.settings,.tab.active,.tab-count,.card-desc,.loading{animation:none!important}
+  .card,.card-desc,.toggle,.toggle-thumb,.btn,.btn-icon,.search,.tab{transition:none!important}
+}
+
+/* ── Animations ────────────────────────────────────── */
+@keyframes window-in{
+  0%{opacity:0;transform:scale(.86) translateY(calc(14px * var(--s)))}
+  100%{opacity:1;transform:scale(1) translateY(0)}
+}
+@keyframes list-in{
+  from{opacity:0;transform:translateX(calc(-6px * var(--s)))}
+  to{opacity:1;transform:none}
+}
+@keyframes card-in{
+  from{opacity:0;transform:translateY(calc(3px * var(--s)))}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes panel-in{
+  from{opacity:0;transform:translateX(calc(14px * var(--s)))}
+  to{opacity:1;transform:none}
+}
+@keyframes tab-pop{
+  from{transform:scale(.92);opacity:.4}
+  to{transform:scale(1);opacity:1}
+}
+@keyframes count-in{
+  from{transform:scale(0);opacity:0}
+  to{transform:scale(1);opacity:1}
+}
+@keyframes desc-in{
+  from{opacity:0;transform:translateY(calc(-3px * var(--s)))}
+  to{opacity:1;transform:none}
+}
+@keyframes sheen{
+  0%,55%{transform:translateX(-120%)}
+  100%{transform:translateX(120%)}
+}
+@keyframes loading-pulse{
+  0%,100%{opacity:.55}
+  50%{opacity:1}
+}
+
+/* Enum dropdown. Native <select> option lists are separate popup widgets and are
+   never painted into CEF's offscreen surface, so the list is plain DOM,
+   portaled to <body> (outside .window-wrap) and positioned by JS to fit the
+   viewport - it can't be clipped by the settings scroller or `contain: paint`.
+   The theme picker reuses these classes. */
+.setting .enum-trigger{
+  width:100%;height:calc(24px * var(--s));
+  display:flex;align-items:center;justify-content:space-between;gap:calc(6px * var(--s));
+  background:var(--track);border:1px solid var(--stroke-soft);
+  border-radius:calc(7px * var(--s));padding:0 calc(7px * var(--s));
+  font-size:calc(11px * var(--s));color:var(--txt1);text-align:left;
+  transition:border 140ms,background 140ms,box-shadow 140ms
+}
+.setting .enum-trigger:hover{background:var(--glass-hover);border-color:var(--stroke)}
+.setting .enum-trigger.open{border-color:var(--accent);box-shadow:var(--focus-ring)}
+.enum-value{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.enum-caret{flex-shrink:0;color:var(--txt3);font-size:calc(9px * var(--s));transition:transform 160ms,color 160ms}
+.setting .enum-trigger.open .enum-caret{transform:rotate(180deg);color:var(--accent)}
+.enum-backdrop{position:fixed;inset:0;z-index:120}
+.enum-menu{
+  position:fixed;z-index:121;overflow-y:auto;overscroll-behavior:contain;
+  display:flex;flex-direction:column;gap:calc(2px * var(--s));
+  padding:calc(4px * var(--s));
+  background:var(--menu-bg);
+  border:1px solid var(--stroke);border-radius:calc(var(--ctl-radius) * var(--s));
+  box-shadow:0 calc(16px * var(--s)) calc(34px * var(--s)) rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.16);
+  animation:enum-in 120ms ease-out
+}
+@keyframes enum-in{from{opacity:0;transform:translateY(calc(-3px * var(--s)))}}
+.enum-option{
+  display:flex;align-items:center;gap:calc(7px * var(--s));min-height:calc(22px * var(--s));
+  padding:0 calc(8px * var(--s));border-radius:calc(6px * var(--s));
+  font-size:calc(11px * var(--s));color:var(--txt2);text-align:left;
+  transition:background 100ms,color 100ms
+}
+.enum-option:hover{background:var(--glass-hover);color:var(--txt1)}
+.enum-option.active{background:rgba(var(--accent-rgb),.18);color:var(--txt1);font-weight:600}
+
+/* Virtual Keyboard Modal */
+.keyboard-modal{
+  position:fixed;inset:0;z-index:100;
+  background:var(--overlay);
+  display:flex;align-items:center;justify-content:center;
+  padding:calc(12px * var(--s));
+  animation:keyboard-in .2s ease-out
+}
+@keyframes keyboard-in{
+  from{opacity:0;transform:scale(.95)}
+  to{opacity:1;transform:scale(1)}
+}
+.keyboard-container{
+  width:100%;max-width:calc(1180px * var(--s));
+  background:var(--win-bg);
+  border:1px solid var(--win-border);
+  border-radius:calc(16px * var(--s));
+  box-shadow:var(--win-shadow);
+  padding:calc(16px * var(--s));
+  max-height:100%;overflow-y:auto
+}
+.keyboard-header{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:0 0 calc(12px * var(--s));margin-bottom:calc(8px * var(--s));
+  border-bottom:1px solid var(--stroke-soft)
+}
+.keyboard-header span{font-size:calc(14px * var(--s));font-weight:600;color:var(--txt1)}
+.keyboard-close{
+  width:calc(28px * var(--s));height:calc(28px * var(--s));
+  border-radius:50%;display:grid;place-items:center;
+  color:var(--txt3);background:transparent;border:1px solid var(--stroke-soft);
+  font-size:calc(14px * var(--s));cursor:pointer;transition:color 120ms,background 120ms
+}
+.keyboard-close:hover{color:var(--txt1);background:var(--glass-hover)}
+.keyboard-rows{display:flex;flex-direction:column;gap:calc(6px * var(--s))}
+.keyboard-row{display:flex;gap:calc(4px * var(--s));justify-content:center}
+.keyboard-key{
+  min-height:calc(44px * var(--s));
+  border-radius:calc(8px * var(--s));
+  background:var(--glass);
+  border:1px solid var(--stroke-soft);
+  color:var(--txt1);
+  font-size:calc(11px * var(--s));
+  font-weight:500;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  transition:background 100ms,color 100ms,border 100ms,transform 50ms;
+  user-select:none
+}
+.keyboard-key:hover{
+  background:var(--glass-hover);border-color:var(--stroke);color:var(--accent);transform:translateY(-1px)
+}
+.keyboard-key.active{
+  background:var(--toggle-on);
+  border-color:var(--accent);color:var(--on-accent);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 4px 12px rgba(var(--accent-rgb),.3)
+}
+.keyboard-key:active{transform:scale(.95)}
+.keyboard-hint{
+  margin-top:calc(12px * var(--s));padding:calc(10px * var(--s));
+  background:var(--track);border:1px solid var(--stroke-soft);
+  border-radius:calc(8px * var(--s));
+  font-size:calc(11px * var(--s));color:var(--txt3);text-align:center
+}

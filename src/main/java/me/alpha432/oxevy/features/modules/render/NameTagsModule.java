@@ -10,6 +10,7 @@ import me.alpha432.oxevy.util.render.NametagUtils;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -17,6 +18,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.enchantment.Enchantment;
 import org.joml.Vector3d;
 
 import java.util.ArrayList;
@@ -34,6 +36,7 @@ public class NameTagsModule extends Module {
     public final Setting<Boolean> distance = bool("Distance", false);
     public final Setting<Boolean> gamemode = bool("Gamemode", false);
     public final Setting<Boolean> armor = bool("Armor", true);
+    public final Setting<Boolean> enchants = bool("Enchants", true);
     public final Setting<Boolean> watermark = bool("Watermark", true);
     public final Setting<Boolean> shadow = bool("Shadow", true);
     public final Setting<Boolean> players = bool("Players", true);
@@ -76,6 +79,8 @@ public class NameTagsModule extends Module {
 
         for (Entity entity : mc.level.entitiesForRendering()) {
             if (entity == mc.player && ignoreSelf.getValue()) continue;
+            // No nametags over the blink trail - it would stack one per ghost
+            if (me.alpha432.oxevy.util.entity.GhostPlayerEntity.isGhost(entity)) continue;
             if (!players.getValue() && entity.getType() == EntityType.PLAYER) continue;
             if (!mobs.getValue() && entity.getType() != EntityType.PLAYER) continue;
             if (entity.distanceToSqr(mc.player) > maxDist) continue;
@@ -225,10 +230,49 @@ public class NameTagsModule extends Module {
         int y = 6;
 
         ctx.fill(x - 1, y - 1, x + totalWidth + 1, y + iconSize + 1, ARMOR_BG_COLOR);
+        int enchY = y + iconSize + 3;
+        int itemX = x;
         for (ItemStack stack : items) {
-            ctx.renderItem(stack, x, y);
-            x += iconSize + gap;
+            ctx.renderItem(stack, itemX, y);
+
+            if (enchants.getValue() && !stack.isEmpty()) {
+                List<String> enchList = getEnchantmentNames(stack);
+                if (!enchList.isEmpty()) {
+                    int enchX = itemX + iconSize / 2;
+                    int ey = enchY;
+                    for (String ench : enchList) {
+                        int ew = mc.font.width(ench);
+                        ctx.drawString(mc.font, ench, enchX - ew / 2, ey, 0xFFAA00FF, true);
+                        ey += mc.font.lineHeight;
+                    }
+                }
+            }
+
+            itemX += iconSize + gap;
         }
+    }
+
+    private List<String> getEnchantmentNames(ItemStack stack) {
+        List<String> result = new ArrayList<>();
+        if (stack.isEmpty()) return result;
+
+        var enchantments = stack.getEnchantments();
+        for (var entry : enchantments.entrySet()) {
+            Holder<Enchantment> holder = entry.getKey();
+            int level = entry.getIntValue();
+            if (level <= 0) continue;
+
+            String name = getEnchantmentName(holder, level);
+            if (!name.isEmpty()) {
+                result.add(name);
+            }
+        }
+        return result;
+    }
+
+    private String getEnchantmentName(Holder<Enchantment> holder, int level) {
+        net.minecraft.network.chat.Component comp = Enchantment.getFullname(holder, level);
+        return comp.getString();
     }
 
     private PlayerInfo getPlayerInfo(Player player) {
