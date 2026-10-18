@@ -10,7 +10,6 @@
 
 **An AI-based utility client, OyVey-ported**
 
-Built with: ChatGPT • DeepSeek • OpenCode • Gemini • Cursor
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-7.3.4-blue.svg)](https://github.com/danek2137/oxevy-2.0/releases)
@@ -102,6 +101,8 @@ only it is *not* nested into the output jar).
 ![Old UI](images/ui1.png)
 ![New UI](images/ui2.png)
 
+# made by
+Built with: ChatGPT • DeepSeek • OpenCode • Gemini • Cursor
 ## License
 
 [MIT](LICENSE)
