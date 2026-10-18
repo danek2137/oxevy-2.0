@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="images/oxevy-watermark.png" alt="Oxevy logo" width="640" />
+ <img src="images/oxevy-watermark.png" alt="Oxevy logo" width="640" />
 </div>
 
 # Oxevy
 
 <div align="center">
 
-**⚠️ THIS PROJECT IS IN BETA ⚠️**
+**THIS PROJECT IS IN BETA**
 
 **An AI-based utility client, OyVey-ported**
 
@@ -19,7 +19,7 @@
 
 </div>
 
-## ⚠️ Requirements MCEF is mandatory
+## Requirements MCEF is mandatory
 
 Oxevy renders **all of its menus through the browser** (main menu, ClickGUI,
 pause screen, accounts, cosmetics, config manager). That means:
@@ -38,12 +38,12 @@ working JCEF the UI cannot render.
 ## Installation (players)
 
 1. Install [Fabric Loader](https://fabricmc.net/use/) for Minecraft 1.21.11 +
-   Fabric API.
+ Fabric API.
 2. Install **[MCEF (`mcef-modern`)](https://modrinth.com/mod/mcef-modern)** 
-   the version above. It also needs a working JCEF (bundled with the mod on
-   most platforms).
+ the version above. It also needs a working JCEF (bundled with the mod on
+ most platforms).
 3. Drop `oxevy-7.3.4.jar` from the [latest release](https://github.com/danek2137/oxevy-2.0/releases)
-   into your `mods` folder.
+ into your `mods` folder.
 4. Launch the game Oxevy opens its own main menu.
 
 ## Minecraft versions / branches
@@ -64,13 +64,13 @@ to each [release](https://github.com/danek2137/oxevy-2.0/releases).
 ## Features
 
 - **Web-based UI** main menu, ClickGUI, pause screen, accounts and cosmetics
-  screens rendered in-engine, transparent liquid-glass styling.
+ screens rendered in-engine, transparent liquid-glass styling.
 - **Config manager** save / load / modify / delete named configs, with
-  **share codes** (`OXEVY1D:…`) so you can send a whole config to a friend as
-  a single string, or export/import `.json` files. The same panel opens from
-  the main menu and from the ClickGUI's *Configs* tab.
+ **share codes** (`OXEVY1D:…`) so you can send a whole config to a friend as
+ a single string, or export/import `.json` files. The same panel opens from
+ the main menu and from the ClickGUI's *Configs* tab.
 - **Modules** combat, movement, render, HUD, misc and client modules with
-  keybinds, friends and profiles (built on the OyVey base).
+ keybinds, friends and profiles (built on the OyVey base).
 - **Cosmetics** capes, skins and head accessories, rendered on your player.
 
 ## Building (developers)
