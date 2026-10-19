@@ -68,7 +68,8 @@ public class KillAuraModule extends Module {
     public enum VisualMode {
         CIRCLE,
         GLOW,
-        BEAM
+        BEAM,
+        THUNDER
     }
 
     private final Setting<VisualMode> visual = mode("Visual", VisualMode.CIRCLE);
@@ -170,6 +171,12 @@ public class KillAuraModule extends Module {
                     if (target instanceof LivingEntity living) {
                         float time = (System.currentTimeMillis() - startTime) / 1000f;
                         TargetVisualRenderer.drawBeam(event.getMatrix(), living, event.getDelta(), time, color.getRGB(), true);
+                    }
+                    break;
+                case THUNDER:
+                    if (target instanceof LivingEntity living) {
+                        float time = (System.currentTimeMillis() - startTime) / 1000f;
+                        TargetVisualRenderer.drawRotatingArc(event.getMatrix(), living, event.getDelta(), time, color.getRGB(), true);
                     }
                     break;
             }

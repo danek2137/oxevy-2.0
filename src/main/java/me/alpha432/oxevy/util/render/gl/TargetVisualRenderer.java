@@ -142,6 +142,72 @@ public class TargetVisualRenderer {
         (throughWalls ? Layers.lines() : Layers.linesDepth()).draw(bufferBuilder.buildOrThrow());
     }
 
+    public static void drawRotatingArc(PoseStack stack, LivingEntity target, float delta, float time, int color, boolean throughWalls) {
+        Vec3 camera = getCameraPos();
+        Vec3 targetPos = new Vec3(
+            Mth.lerp(delta, target.xo, target.getX()),
+            Mth.lerp(delta, target.yo, target.getY()),
+            Mth.lerp(delta, target.zo, target.getZ())
+        );
+        float width = target.getBbWidth();
+        float height = target.getBbHeight();
+        float cx = (float) (targetPos.x - camera.x);
+        float cy = (float) (targetPos.y - camera.y + height * 0.05);
+        float cz = (float) (targetPos.z - camera.z);
+
+        double baseR = width * 1.15;
+        double arcLen = Math.PI * 0.55; // ~100 degrees
+        double start = time * 2.2;
+        int segs = 60;
+        int a = (color >> 24) & 0xFF;
+        int r = (color >> 16) & 0xFF;
+        int g = (color >> 8) & 0xFF;
+        int b = color & 0xFF;
+
+        BufferBuilder bufferBuilder = Tesselator.getInstance()
+            .begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_LINE_WIDTH);
+        PoseStack.Pose pose = stack.last();
+
+        // Glow layers
+        for (int layer = 2; layer >= 0; layer--) {
+            double layerR = baseR * (1.0 + layer * 0.12);
+            float alphaMul = 1.0f - layer * 0.3f;
+            float lineW = 4f - layer * 1.2f;
+            int layerA = (int) (a * alphaMul);
+
+            for (int i = 0; i < segs; i++) {
+                double a1 = start + (double) i / segs * arcLen;
+                double a2 = start + (double) (i + 1) / segs * arcLen;
+                float x1 = (float) (cx + Math.cos(a1) * layerR);
+                float z1 = (float) (cz - Math.sin(a1) * layerR);
+                float x2 = (float) (cx + Math.cos(a2) * layerR);
+                float z2 = (float) (cz - Math.sin(a2) * layerR);
+
+                double norm = (double) i / segs;
+                int segA = (int) (layerA * (0.6 + 0.4 * Math.sin(norm * Math.PI)));
+                int segColor = (Math.min(255, Math.max(0, segA)) << 24)
+                    | (Math.min(255, Math.max(0, r)) << 16)
+                    | (Math.min(255, Math.max(0, g)) << 8)
+                    | Math.min(255, Math.max(0, b));
+
+                bufferBuilder.addVertex(pose, x1, cy, z1).setColor(segColor).setLineWidth(lineW);
+                bufferBuilder.addVertex(pose, x2, cy, z2).setColor(segColor).setLineWidth(lineW);
+            }
+        }
+
+        // Leading dot
+        double headAngle = start + arcLen;
+        float hx = (float) (cx + Math.cos(headAngle) * baseR);
+        float hz = (float) (cz - Math.sin(headAngle) * baseR);
+        int headColor = multAlpha(color, 255);
+        bufferBuilder.addVertex(pose, hx - 0.15f, cy, hz).setColor(headColor).setLineWidth(6f);
+        bufferBuilder.addVertex(pose, hx + 0.15f, cy, hz).setColor(headColor).setLineWidth(6f);
+        bufferBuilder.addVertex(pose, hx, cy, hz - 0.15f).setColor(headColor).setLineWidth(6f);
+        bufferBuilder.addVertex(pose, hx, cy, hz + 0.15f).setColor(headColor).setLineWidth(6f);
+
+        (throughWalls ? Layers.lines() : Layers.linesDepth()).draw(bufferBuilder.buildOrThrow());
+    }
+
     private static int multAlpha(int color, int alpha) {
         return (color & 0x00FFFFFF) | (Math.max(0, Math.min(255, alpha)) << 24);
     }
