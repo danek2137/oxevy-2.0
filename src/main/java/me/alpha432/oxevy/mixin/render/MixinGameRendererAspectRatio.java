@@ -25,7 +25,7 @@ public class MixinGameRendererAspectRatio {
                 : Oxevy.moduleManager.getModuleByClass(AspectRatioModule.class);
         if (ar == null || !ar.isEnabled()) return;
         float far = getDepthFar();
-        float aspect = ar.ratio.getValue();
+        float aspect = ar.getAspect();
         cir.setReturnValue(new Matrix4f().perspective(fov * ((float) Math.PI / 180), aspect, 0.05f, far));
     }
 }
